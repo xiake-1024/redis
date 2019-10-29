@@ -53,8 +53,57 @@ int zslRandomLevel(void) {
 }
 
 zskiplistNode *zslInsert(zskiplist *zsl, double score, sds ele) {
- 
+ 	zskiplistNode *update[ZSKIPLIST_MAXLEVEL],*x;
+	unsigned int rank[ZSKIPLIST_MAXLEVEL];
+	int i,level;
+
+	x=zsl->header;
+	for(i=zsl->level-1;i>0;i--){
+		rank[i]=i==zsl->level?0:rank[i+1];
+		while (x->level[i].forward&&
+				(x->level[i].forward.score<score||
+				sdscmp(x->level[i].forward.ele,ele)<0))
+			{
+				rank[i]+=x->level[i].span;
+				x=x->level[i].forward;
+			}
+			update[i]=x;
+	}
+	level=zslRandomLevel();
+	if(level>zsl->level){
+		for(i=level;i>zsl->level;i--){
+			rank[i]=0;
+			update[i]=zsl->header;
+			update[i]->level[i].span=zsl->length;
+		}
+		zsl->level=level;
+	}
+	
+	for(i=0;i<level0;i++){
+		//更新forward
+		x->level[i].forward=update[i]->level[i].forward;
+		update[i]->level[i].forward=x;
+		//更新span
+		x->level[i].span=update[i]->level[i].span-(rank[0]-rank[x]);
+		update[i]->level[i].span=x->level[i].span-(rank[0]-rank[x]);
+	}
+
+	for(i=level;i<zsl->level;i++){
+		update[i]->level[i].span++;
+	}
+
+	//修改x的前项指针和后向指针
+	x->backward=(update[0]==zsl->header)?NULL:update[0];
+	if(x->level[0].forward){
+		x->level[0].forward->backward=x;
+	}else{
+		zsl->tail=x;
+	}
+	zsl->length++;
+	return x;
 }
+
+
 
 /* Internal function used by zslDelete, zslDeleteByScore and zslDeleteByRank */
 //只是将节点从跳跃表中解绑 具体释放内存上层处理
@@ -182,12 +231,38 @@ unsigned long zslDeleteRangeByRank(zskiplist *zsl, unsigned int start, unsigned 
  * Note that the rank is 1-based due to the span of zsl->header to the
  * first element. */
 unsigned long zslGetRank(zskiplist *zsl, double score, sds ele) {
-   
+   zskiplistNode *x;
+   int i;
+   unsigned long rank=0;
+   x=zsl->header;
+   for(i=zsl->level-1;i>=0;i--){
+		while(x->level[i].forward&&
+			(x->level[i].forward.score>score||
+			sdscmp(x->level[i].forward.ele, ele)<=0)){
+				rank+=x->level[i].span;
+				x=x->level[i].forward;
+			}
+		if(x->ele&&sdscmp(x->ele,ele)==0){
+			return rank;
+		}
+   }
+   return 0;
 }
 
 /* Finds an element by its rank. The rank argument needs to be 1-based. */
 zskiplistNode* zslGetElementByRank(zskiplist *zsl, unsigned long rank) {
-  
+  	zskiplistNode *x;
+	unsigned long traversed=0;
+	for(int i=zsl->level-1;i>=0;i--){
+		while(x->level[i].forward&&(traversed+x->level[i].span<=rank)){
+			traversed+=x->level[i].span;
+			x=x->level[i].forward;
+		}
+		if(traversed==rank){
+			return x;
+		}
+	}
+	return NULL;
 }
 
 /* Populate the rangespec according to the objects min and max. */
