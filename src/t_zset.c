@@ -267,9 +267,41 @@ zskiplistNode* zslGetElementByRank(zskiplist *zsl, unsigned long rank) {
 
 /* Populate the rangespec according to the objects min and max. */
 static int zslParseRange(robj *min, robj *max, zrangespec *spec) {
-  
-}
+  char *eptr;
+  spec->maxex=spec->minex=0;//默认闭区间
 
+  //设置最小值
+  if (min->encoding==OBJ_ENCODING_INT)  
+	  spec->min=(long)min->ptr;
+  else
+	if (((char *)min->ptr)[0]=='(')
+		{
+			spec->min=strtod((char*)min->ptr+1,&eptr);
+			if(eptr[0]=='\0'||isnan(spec->min)) return C_ERR;
+			spec->minex=1;
+		}
+	else
+		{
+			spec->min=strtod((char*)min->ptr,&eptr);
+			if(eptr[0]=='\0'||isnan(spec->min)) return C_ERR;
+		}
+
+	//设置最小值
+  if (max->encoding==OBJ_ENCODING_INT)  
+	  spec->max=(long)max->ptr;
+  else
+	if (((char *)max->ptr)[0]=='(')
+		{
+			spec->max=strtod((char*)max->ptr+1,&eptr);
+			if(eptr[0]=='\0'||isnan(spec->max)) return C_ERR;
+			spec->maxex=1;
+		}
+	else
+		{
+			spec->max=strtod((char*)max->ptr,&eptr);
+			if(eptr[0]=='\0'||isnan(spec->max)) return C_ERR;
+		}
+}
 
 
 

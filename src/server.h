@@ -1671,6 +1671,7 @@ void receiveChildInfo(void);
 /* Struct to hold a inclusive/exclusive range spec by score comparison. */
 typedef struct {
     double min, max;
+	//是否是开闭区间，1为开，0位闭
     int minex, maxex; /* are min or max exclusive? */
 } zrangespec;
 
