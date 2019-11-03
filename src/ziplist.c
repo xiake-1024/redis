@@ -423,9 +423,22 @@ int zipTryEncoding(unsigned char *entry,unsigned int entrylen,long long *v,unsig
 	return 0;
 }
 
+/* Encode the length of the previous entry and write it to "p". This only
+ * uses the larger encoding (required in __ziplistCascadeUpdate). */
+ 
 
 
 
+/* Encode the length of the previous entry and write it to "p". Return the
+ * number of bytes needed to encode this length if "p" is NULL. */
+ //previous_entry_length所需空间大小
+unsigned int zipStorePrevEntryLength(unsigned char *p,unsigned int len){
+	if(p==NULL){
+		return (len<ZIP_BIG_PREVLEN)
+	}else{
+	
+	}
+}
 
 
 
