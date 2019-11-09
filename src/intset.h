@@ -27,5 +27,30 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+#ifndef _INTSET_H
+#define _INTSET_H
+#include<stdin.h>	
 
+typedef struct intset{
+	unit32_t encoding;
+	uint32_t length;
+	int8_t contents[];
+} intset;
+
+intset *intsetNew(void);
+intset *intsetRemove(intset *is,int64_t value,unit8_t *success);
+intset *intsetAdd(intset *is,int64_t value,int *success);
+unit8_t intsetFind(intset *is,int64_t value);
+int64_t intsetRandom(intset *is);
+uint8_t intsetGet(intset *is,uint32_t pos,int64_t *value );
+uint32_t intseLen(cosnt intset *is);
+size_t intsetBlobLen(intset *is);
+
+
+
+#ifdef REDIS_TEST
+	int intsetTest(int argc,char *argv[]);
+#endif
+
+#endif
 

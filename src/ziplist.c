@@ -619,6 +619,7 @@ unsigned char *_ziplistInsert(unsigned char * zl, unsigned char * p, unsigned ch
 		ZIPLIST_TAIL_OFFSET(zl)=
 			intrev32ifbe(intrev32ifbe(ZIPLIST_TAIL_OFFSET(zl)+nextdiff));
 	}
+
 	
 	
 	
