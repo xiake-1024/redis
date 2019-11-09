@@ -98,6 +98,61 @@ static void _intsetSet(intset *is,int pos,int64_t value){
 	}
 }
 
+/* Return the value at pos, using the configured encoding. */
+static int64_t _intsetGet(intset *is, int pos) {
+    return _intsetGetEncoded(is,pos,intrev32ifbe(is->encoding));
+}
+
+
+/* Search for the position of "value". Return 1 when the value was found and
+ * sets "pos" to the position of the value within the intset. Return 0 when
+ * the value is not present in the intset and sets "pos" to the position
+ * where "value" can be inserted. */
+//查找value的位置  ，如果被找到返回1，并返回位置pos，否则返回0，并将pos设置为value可以被插入的位置
+static uint8_t intsetSearch(intset *is,int64_t value,uint32_t *pos){
+	int min=0,max=intrev32ifbe(is->length)-1,mid=-1;
+	int64_t cur=-1;
+
+	/* The value can never be found when the set is empty */
+	if(intrev32ifbe(is->length)==0){
+		if(pos) *pos=0;
+		return 0;
+	}else{
+		 /* Check for the case where we know we cannot find the value,
+         * but do know the insert position. */
+         if(value>_intsetGet(is,max)){
+			if(pos) *pos=intrev32ifbe(is->length);
+			return 0;
+		 }else if(value<_intsetGet(is,0)){
+			if(pos)	 *pos=0;
+			return 0;
+		 }
+	}
+
+	//采用二分查找算法进行搜索
+	while(max>=min){
+		//右移1位  代表除以2
+		mid=((unsigned int)min+(unsigned int)max)>>1;
+		cur=_intsetGet(is, mid);
+		if(value>cur){
+				min=mid+1;
+		}else if(value<cur){
+				max=mid-1;
+		}else{
+			break;
+		}
+	}
+	//判断找到元素没有
+	if(value==cur){
+		if(pos) *pos=mid;
+		return 1;
+	}else{
+		if(pos) *pos=min;
+		return 0;
+	}
+
+}
+
 /* Upgrades the intset to a larger encoding and inserts the given integer. */
 //对intset进行扩容 并插入元素
 static intset *intsetUpgradeAndAdd(intset *is,int64_t value){
@@ -128,6 +183,10 @@ static intset *intsetUpgradeAndAdd(intset *is,int64_t value){
 	return is;
 }
 
+static void intsetMoveTail(intset *is,unit32_t form,uint32_t to){
+
+}
+
 
 /* Create an empty intset. */
 intset *intsetNew(void){
@@ -137,6 +196,9 @@ intset *intsetNew(void){
 	is->length=0;
 	return is;
 }
+
+
+
 
 /* Insert an integer in the intset */
 //向intset里面插入整数
@@ -148,12 +210,22 @@ intset *intsetAdd(intset * is, int64_t value, int * success){
 	//如果失败的情况少  那么就默认成功
 	if(success) *success=1;
 	if(valenc>intrev32ifbe(is->encoding)){
-		
+		/* This always succeeds, so we don't need to curry *success. */
+		return intsetUpgradeAndAdd(is, value);
 	}else{
+		  /* Abort if the value is already present in the set.
+         * This call will populate "pos" with the right position to insert
+         * the value when it cannot be found. */
+		if(intsetSearch(is,value,&pos)){
+			if(success) *success=0;
+			return is;
+		}
 
+		is=intsetResize(is, intrev32ifbe(is->length)+1);
+
+		  
 	}		
 
-	
 }
 
 
