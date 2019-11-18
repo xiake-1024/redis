@@ -92,9 +92,22 @@ int dictRehash(dict d,int n){
 	int empty_visits=n*10;/* Max number of empty buckets to visit. */
 	if(!dictIsRehashing(d))	return 0;
 	while(n--&&d->ht[0].used !=0){
-		d->rehashidx++;
-		if(--empty_visits==0) return 1;//经历empty_visit次bucket空的时 下次rehash
+		dictEntry *de,*nextde;
+	
+		while (d->ht[0].table[d->rehashidx]==NULL)
+			{
+				d->rehashidx++;
+				if(--empty_visits==0) return 1;//经历empty_visit次bucket空的时 下次rehash
+			}
+		de=d->ht[0].table[d->rehashidx];
+		while (de)
+			{
+				unit64_t h;
+
+				
+			}
 	}
+	
 	
 	/* Check if we already rehashed the whole table... */
 	//检查是否已经rehash完成
