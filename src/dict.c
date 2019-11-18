@@ -104,8 +104,20 @@ int dictRehash(dict d,int n){
 			{
 				unit64_t h;
 
-				
+				nextde=de->next;
+				/* Get the index in the new hash table */
+				//获取新的hash表
+				h=dictHashKey(d, de->key)&d->ht[1].sizemask;
+				//插入链表的最前面  据说可以省时间??
+				de->next =d->ht[1].table[h] ;
+				d->ht[1].table[h]=de;
+
+				d->ht[0].used--;//老dictht(节点数)-1
+				d->ht[1].used++;//新dictht(节点数)+1
+							
 			}
+		d->ht[0].table[d->rehashidx]=NULL;//当前bucket已经全部移走
+		d->rehashidx++;//移动到下一个bucket
 	}
 	
 	
@@ -121,6 +133,100 @@ int dictRehash(dict d,int n){
 	
 	//继续下次rehash
 	return 1;
+}
+/* A fingerprint is a 64 bit number that represents the state of the dictionary
+ * at a given time, it's just a few dict properties xored together.
+ * When an unsafe iterator is initialized, we get the dict fingerprint, and check
+ * the fingerprint again when the iterator is released.
+ * If the two fingerprints are different it means that the user of the iterator
+ * performed forbidden operations against the dictionary while iterating. */
+ //unsafe迭代器在第一次dictNext时用dict的两个dictht的table、size、used进行hash算出一个结果
+//最后释放iterator时再调用这个函数生成指纹，看看结果是否一致，不一致就报错.
+//safe迭代器不会用到这个
+ long long dictFingerprint(dict *d) {
+	 long long integers[6], hash = 0;
+	 int j;
+ 
+	 integers[0] = (long) d->ht[0].table;//把指针类型转换成long
+	 integers[1] = d->ht[0].size;
+	 integers[2] = d->ht[0].used;
+	 integers[3] = (long) d->ht[1].table;
+	 integers[4] = d->ht[1].size;
+	 integers[5] = d->ht[1].used;
+ 
+	 /* We hash N integers by summing every successive integer with the integer
+	  * hashing of the previous sum. Basically:
+	  *
+	  * Result = hash(hash(hash(int1)+int2)+int3) ...
+	  *
+	  * This way the same set of integers in a different order will (likely) hash
+	  * to a different number. */
+	 for (j = 0; j < 6; j++) {
+		 hash += integers[j];
+		 /* For the hashing step we use Tomas Wang's 64 bit integer hash. */
+		 hash = (~hash) + (hash << 21); // hash = (hash << 21) - hash - 1;
+		 hash = hash ^ (hash >> 24);
+		 hash = (hash + (hash << 3)) + (hash << 8); // hash * 265
+		 hash = hash ^ (hash >> 14);
+		 hash = (hash + (hash << 2)) + (hash << 4); // hash * 21
+		 hash = hash ^ (hash >> 28);
+		 hash = hash + (hash << 31);
+	 }
+	 return hash;
+ }
+
+ dictIterator *dictGetIterator(dict *d){
+	dictIterator *iter =zmalloc(sizeof(*iter));
+
+	iter->d=d;
+	iter->table=0;
+	iter->index=-1;
+	iter->safe=0;
+	 iter->entry = NULL;
+    iter->nextEntry = NULL;
+    return iter;	
+ }
+
+ dictIterator *dictGetSafeIterator(dict *d) {
+    dictIterator *i = dictGetIterator(d);
+
+    i->safe = 1;
+    return i;
+}
+
+dictEntry *dictNext(dictIterator *iter){
+	while (1)
+		{
+			if(iter->entey==NULL){	//新new的dictIterator的entry是null，或者到达一个bucket的链表尾部
+				dictht *ht=&iter->d->ht[iter->table];//dictht的地址
+				if(iter->index==-1&&iter->table==0){
+					//刚new的dictIterator
+					if(iter->safe)
+						iter->d->iterator++;
+					else
+						iter->fingerprint=dictFingerprint(iter->d);//初始化unsafe迭代器的指纹，只进行一次
+				}
+				 iter->index++;//buckets的下一个索引
+				 if(iter->index>=(long)ht->size){
+					//如果buckets的索引大于等于这个buckets的大小，则这个buckets迭代完毕
+					if(dictIsRehashing(iter->d)&&iter->table==0){//当前使用的是dictht[0]
+						//考虑rehash，换第二个dictht 
+						iter->table++;
+						iter->index=0;//index复原成0，从第二个dictht的第0个bucket迭代
+						ht = &iter->d->ht[1];//设置这个是为了rehash时更新下面的iter->entry
+					}else{
+						break;
+					}
+				 }
+				 iter->entry=ht->table[iter->index];
+				
+			}else{
+				iter->entry=ht->table[iter->index];
+			}
+			
+			
+		}
+	return NULL;
 }
 
 /* ------------------------------- Debugging ---------------------------------*/

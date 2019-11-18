@@ -89,8 +89,11 @@ typedef struct dict{
 
 //迭代器
 typedef struct dictIterator{
-
+	dict *d;
+	long index;//当前buckets索引，buckets索引类型是unsinged long，而这个初始化会是-1,所以long
 	int table,safe;//safe 区分是否是安全迭代器(1为安全迭代器)
+	dictEntry *entry,*nextEntry;//当前hash节点以及下一个hash节点
+	long long fingerprint;//dict.c里的dictFingerprint(),不安全迭代器相关
 } dictIterator;
 
 /* ------------------------------- Macros ------------------------------------*/
