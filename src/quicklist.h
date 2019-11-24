@@ -54,5 +54,88 @@ typedef struct quicklistNode{
 	unsigned int attempted_compress : 1; // 测试相关  /* node can't compress; too small */
 	 unsigned int extra : 10; // 扩展字段，暂时没用 /* more bits to steal for future usage */
 }quicklistNode;
+/* quicklistLZF is a 4+N byte struct holding 'sz' followed by 'compressed'.
+ * 'sz' is byte length of 'compressed' field.
+ * 'compressed' is LZF data with total (compressed) length 'sz'
+ * NOTE: uncompressed length is stored in quicklistNode->sz.
+ * When quicklistNode->zl is compressed, node->zl points to a quicklistLZF */
+ //一种采用LZF压缩算法压缩的数据结构
+typedef struct quicklistLZF{
+	unsigned int sz;	//LZF压缩后占用的字节数
+	char compressed[];		//柔性数组，指向数据部分
+} quicklistLZF;
+/* quicklist is a 40 byte struct (on 64-bit systems) describing a quicklist.
+ * 'count' is the number of total entries.
+ * 'len' is the number of quicklist nodes.
+ * 'compress' is: -1 if compression disabled, otherwise it's the number
+ *                of quicklistNodes to leave uncompressed at ends of quicklist.
+ * 'fill' is the user-requested (or default) fill factor. */
+ //8+8+8+8+8
+ //quicklist的这个结构体在源码中说是占用了40byte的空间，怎么计算的呢？这边涉及到了位域的概念，
+ //所谓”位域“是把一个字节中的二进位划分为几 个不同的区域， 并说明每个区域的位数。每个域有一个域名，
+ //允许在程序中按域名进行操作。比如这个“int fill : 16” 表示不用整个int存储fill，而是只用了其中的16位来存储。
+ typedef struct quicklist{
+	quicklistNode *head;
+	quicklistNode *tail;
+	unsigned long count;  //  total count of all entries in all ziplists   ziplist中的entry节点计数器
+	unsigned long len;			//quicklist的quicklistNode节点计数器 /* number of quicklistNodes */ 
+	int fill:16;					 // ziplist大小限定，由list-max-ziplist-size给定
+	unsigned int compress:16;			//节点压缩深度设置，由list-compress-depth给定 /* depth of end nodes not to compress;0=off */
+ }quicklist;
+ // quicklist的迭代器结构
+ typedef struct quicklistIter{
+	const quicklist *quicklist;// 指向所在quicklist的指针
+	quicklistNode *current;     // 指向当前节点的指针
+	unsigned char *zi;			// 指向当前节点的ziplist
+	long offset;				 // 当前ziplist中的偏移地址
+	int direction;					 // 迭代器的方向
+ }quicklistIter;
+
+typedef struct quicklistEntry{
+	const quicklist *quicklist;		//指向所属的quicklist的指针
+	quicklistNode *node;			//指向所属的quicklistNode节点的指针
+	unsigned char *zi;				 //指向当前ziplist结构的指针
+	unsigned char *value;				//指向当前ziplist结构的字符串vlaue成员  
+	long long longval;					//指向当前ziplist结构的整数value成员
+	unsigned int sz;					//保存当前ziplist结构的字节数大小
+	int offset;							//保存相对ziplist的偏移量
+}quicklistEntry;
+
+
+#define QUICKLIST_HEAD 0
+#define QUICKLIST_TAIL -1
+
+/* quicklist node encodings */
+//编码方式
+#define QUICKLIST_NODE_ENCODING_RAW 1
+#define QUICKLIST_NODE_ENCODING_LZF 2
+
+/* quicklist compression disable */
+#define QUICKLIST_NOCOMRESS 0
+
+/* quicklist container formats */
+#define QUICKLIST_NODE_CONTAINER_node 1
+#define QUICKLIST_NODE_CONTAINER_ZIPLIST 2
+
+/* Directions for iterators */
+//迭代方向
+#define AL_START_HEAD 0
+#define AL_START_TAIL 1;
+
+#define quicklistNodeIsCompressed(node) ((node)->encoding == QUICKLIST_NODE_ENCODING_LZF)
+
+/* Prototypes */
+quicklist *quicklistCreate(void);
+quicklist *quicklistNew(int fill,int compress);
+void quicklistSetCompressDepth(quicklist *quicklist,int depth);
+int quicklistPushHead(quicklist *quicklist,void *value,const size_t sz);
+int quicklistPushTail(quicklist *quicklist,void *value,const size_t sz);
+void quicklistPush(quicklist *quicklist,void *value,const size_t sz,int where);
+
+
+
+
+
+
 
 #endif /* __QUICKLIST_H__ */
