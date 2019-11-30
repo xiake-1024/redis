@@ -37,7 +37,7 @@
  * the strings "foo", "foobar" and "footer" after the insertion of each
  * word. When the node represents a key inside the radix tree, we write it
  * between [], otherwise it is written between ().
- *
+ *下面插入 "foo", "foobar" and "footer" ,key 在[]之间,否则在()之间
  * This is the vanilla representation:
  *
  *              (f) ""
@@ -60,6 +60,7 @@
  * and only the link to the node representing the last character node is
  * provided inside the representation. So the above representation is turend
  * into:
+ *只有单个子节点的节点的连续节点给压缩到节点中
  *
  *                  ["foo"] ""
  *                     |
@@ -74,7 +75,7 @@
  * "node splitting" operation is needed, since the "foo" prefix is no longer
  * composed of nodes having a single child one after the other. This is the
  * above tree and the resulting node splitting after this event happens:
- *
+ *这种优化使实现变得复杂,比如增加一个first  需要对对上面的foo 进行拆分
  *
  *                    (f) ""
  *                    /
@@ -91,22 +92,22 @@
  * Similarly after deletion, if a new chain of nodes having a single child
  * is created (the chain must also not include nodes that represent keys),
  * it must be compressed back into a single node.
+ * 删除操作也一样，可能删除后 又压缩回单个节点。 不太理解??
  *
  */
 
-#define RAX_NODE_MAX_SIZE ((1<<29)-1)
-typedef struct raxNode {
-    uint32_t iskey:1;     /* Does this node contain a key? */
-    uint32_t isnull:1;    /* Associated value is NULL (don't store it). */
-    uint32_t iscompr:1;   /* Node is compressed. */
-    uint32_t size:29;     /* Number of children, or compressed string len. */
-    /* Data layout is as follows:
+typedef struct raxNode{
+	uint32_t iskey:1;		/* Does this node contain a key? */ //不太理解?????
+	uint32_t isnull:1;		/* Associated value is NULL (don't store it). */	 //isnull为1时，value-ptr没有 否则指向数据
+	uint32_t iscompr:1;		/* Node is compressed. */
+	uint32_t size:29;		/* Number of children, or compressed string len. */ //有子节点代表字几点的数量 否则表示压缩字符串的长度
+	 /* Data layout is as follows:
      *
      * If node is not compressed we have 'size' bytes, one for each children
      * character, and 'size' raxNode pointers, point to each child node.
      * Note how the character is not stored in the children but in the
      * edge of the parents:
-     *
+     * 非压缩节点  ,每个字符来自于不同的字符串,szie代表指向子节点指针个数
      * [header iscompr=0][abc][a-ptr][b-ptr][c-ptr](value-ptr?)
      *
      * if node is compressed (iscompr bit is 1) the node has 1 children.
@@ -126,91 +127,20 @@ typedef struct raxNode {
      * (isnull=0), then after the raxNode pointers poiting to the
      * children, an additional value pointer is present (as you can see
      * in the representation above as "value-ptr" field).
+     *如果 iskey=1并且isnull=0，会提供value-ptr字段指向数据
      */
-    unsigned char data[];
+	unsigned char data[];
 } raxNode;
-
-typedef struct rax {
-    raxNode *head;
-    uint64_t numele;
-    uint64_t numnodes;
+//基数树定义
+typedef struct rax{
+	raxNode *head;
+	uint64_t numele;
+	uint64_t numnodes;
 } rax;
-
-/* Stack data structure used by raxLowWalk() in order to, optionally, return
- * a list of parent nodes to the caller. The nodes do not have a "parent"
- * field for space concerns, so we use the auxiliary stack when needed. */
-#define RAX_STACK_STATIC_ITEMS 32
-typedef struct raxStack {
-    void **stack; /* Points to static_items or an heap allocated array. */
-    size_t items, maxitems; /* Number of items contained and total space. */
-    /* Up to RAXSTACK_STACK_ITEMS items we avoid to allocate on the heap
-     * and use this static array of pointers instead. */
-    void *static_items[RAX_STACK_STATIC_ITEMS];
-    int oom; /* True if pushing into this stack failed for OOM at some point. */
-} raxStack;
-
-/* Optional callback used for iterators and be notified on each rax node,
- * including nodes not representing keys. If the callback returns true
- * the callback changed the node pointer in the iterator structure, and the
- * iterator implementation will have to replace the pointer in the radix tree
- * internals. This allows the callback to reallocate the node to perform
- * very special operations, normally not needed by normal applications.
- *
- * This callback is used to perform very low level analysis of the radix tree
- * structure, scanning each possible node (but the root node), or in order to
- * reallocate the nodes to reduce the allocation fragmentation (this is the
- * Redis application for this callback).
- *
- * This is currently only supported in forward iterations (raxNext) */
-typedef int (*raxNodeCallback)(raxNode **noderef);
-
-/* Radix tree iterator state is encapsulated into this data structure. */
-#define RAX_ITER_STATIC_LEN 128
-#define RAX_ITER_JUST_SEEKED (1<<0) /* Iterator was just seeked. Return current
-                                       element for the first iteration and
-                                       clear the flag. */
-#define RAX_ITER_EOF (1<<1)    /* End of iteration reached. */
-#define RAX_ITER_SAFE (1<<2)   /* Safe iterator, allows operations while
-                                  iterating. But it is slower. */
-typedef struct raxIterator {
-    int flags;
-    rax *rt;                /* Radix tree we are iterating. */
-    unsigned char *key;     /* The current string. */
-    void *data;             /* Data associated to this key. */
-    size_t key_len;         /* Current key length. */
-    size_t key_max;         /* Max key len the current key buffer can hold. */
-    unsigned char key_static_string[RAX_ITER_STATIC_LEN];
-    raxNode *node;          /* Current node. Only for unsafe iteration. */
-    raxStack stack;         /* Stack used for unsafe iteration. */
-    raxNodeCallback node_cb; /* Optional node callback. Normally set to NULL. */
-} raxIterator;
-
-/* A special pointer returned for not found items. */
-extern void *raxNotFound;
 
 /* Exported API. */
 rax *raxNew(void);
-int raxInsert(rax *rax, unsigned char *s, size_t len, void *data, void **old);
-int raxTryInsert(rax *rax, unsigned char *s, size_t len, void *data, void **old);
-int raxRemove(rax *rax, unsigned char *s, size_t len, void **old);
-void *raxFind(rax *rax, unsigned char *s, size_t len);
-void raxFree(rax *rax);
-void raxFreeWithCallback(rax *rax, void (*free_callback)(void*));
-void raxStart(raxIterator *it, rax *rt);
-int raxSeek(raxIterator *it, const char *op, unsigned char *ele, size_t len);
-int raxNext(raxIterator *it);
-int raxPrev(raxIterator *it);
-int raxRandomWalk(raxIterator *it, size_t steps);
-int raxCompare(raxIterator *iter, const char *op, unsigned char *key, size_t key_len);
-void raxStop(raxIterator *it);
-int raxEOF(raxIterator *it);
-void raxShow(rax *rax);
-uint64_t raxSize(rax *rax);
-unsigned long raxTouch(raxNode *n);
-void raxSetDebugMsg(int onoff);
 
-/* Internal API. May be used by the node callback in order to access rax nodes
- * in a low level way, so this function is exported as well. */
-void raxSetData(raxNode *n, void *data);
+
 
 #endif
