@@ -92,13 +92,13 @@
  * Similarly after deletion, if a new chain of nodes having a single child
  * is created (the chain must also not include nodes that represent keys),
  * it must be compressed back into a single node.
- * 删除操作也一样，可能删除后 又压缩回单个节点。 不太理解??
+ * 删除操作也一样，可能删除后 又压缩回单个节点。 不太理解?? 
  *
  */
 
 typedef struct raxNode{
 	uint32_t iskey:1;		/* Does this node contain a key? */ //不太理解?????
-	uint32_t isnull:1;		/* Associated value is NULL (don't store it). */	 //isnull为1时，value-ptr没有 否则指向数据
+	uint32_t isnull:1;		/* Associated value is NULL (don't store it). */	 //isnull为1时，value-ptr没有 否则指向数据, 比如 raxReallocForData data为null 该值为1
 	uint32_t iscompr:1;		/* Node is compressed. */
 	uint32_t size:29;		/* Number of children, or compressed string len. */ //有子节点代表字几点的数量 否则表示压缩字符串的长度
 	 /* Data layout is as follows:
@@ -137,6 +137,21 @@ typedef struct rax{
 	uint64_t numele;
 	uint64_t numnodes;
 } rax;
+/* Stack data structure used by raxLowWalk() in order to, optionally, return
+ * a list of parent nodes to the caller. The nodes do not have a "parent"
+ * field for space concerns, so we use the auxiliary stack when needed. */
+ //不太理解??
+ #define RAX_STACK_STATIC_ITEMS 32 
+ typedef struct raxStack{
+	void **stack;	/* Points to static_items or an heap allocated array. *///指向静态分配的空间和动态分配的堆空间
+	size_t items,maxitems;/* Number of items contained and total space. *///item个数和总空间大小
+	/* Up to RAXSTACK_STACK_ITEMS items we avoid to allocate on the heap
+     * and use this static array of pointers instead. *///不太理解??
+     void *static_items[RAX_STACK_STATIC_ITEMS];
+	int oom;/* True if pushing into this stack failed for OOM at some point. */  //向栈中push的item 失败改位置1
+ } raxStack;
+ 
+
 
 /* Exported API. */
 rax *raxNew(void);
