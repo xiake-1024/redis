@@ -348,7 +348,9 @@ raxNode *raxAddChild(raxNode *n,unsigned char c,raxNode **childptr,raxNode ***pa
 	
 }
 
-
+/* This is the core of raxFree(): performs a depth-first scan of the
+ * tree and releases all the nodes found. */
+void raxRecursiveFree()
 
 
 

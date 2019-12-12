@@ -155,6 +155,7 @@ typedef struct rax{
 
 /* Exported API. */
 rax *raxNew(void);
+void raxFreeWithCallback(rax *rax,void (*free_callback)(void *));
 
 
 
