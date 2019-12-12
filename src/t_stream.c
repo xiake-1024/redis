@@ -61,12 +61,17 @@ steam *streamNew(void){
 }
 
 /* Free a stream, including the listpacks stored inside the radix tree. */
+//释放stream,包括基数树里面的listpack
 void freeStream(stream *s){
 	  raxFreeWithCallback(s->rax,(void(*)(void*))lpFree);
     if (s->cgroups)
         raxFreeWithCallback(s->cgroups,(void(*)(void*))streamFreeCG);
     zfree(s);
 }
+/* -----------------------------------------------------------------------
+ * Low level implementation of consumer groups 消费组的底层应用
+ * ----------------------------------------------------------------------- */
+ 
 
 
 

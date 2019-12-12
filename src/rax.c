@@ -225,7 +225,7 @@ void raxSetData(raxNode *n,void *data){
 /* Get the node auxiliary data. *///返回的是指向数据的指针
 void *raxGetData(raxNode *n){
 	if(n->isnull) return NULL;//没有数据 返回null
-	void **ndata-(void**)((char*)n+raxNodeCurrentLength(n)-sizeof(void*));
+	void **ndata=(void**)((char*)n+raxNodeCurrentLength(n)-sizeof(void*));
 	void *data;
 	memcpy(&data,ndata,sizeof(data));
 	return data;
@@ -350,7 +350,42 @@ raxNode *raxAddChild(raxNode *n,unsigned char c,raxNode **childptr,raxNode ***pa
 
 /* This is the core of raxFree(): performs a depth-first scan of the
  * tree and releases all the nodes found. */
-void raxRecursiveFree()
+ //这个函数是raxFree的核心，是rax树的第一层遍历，释放所有节点
+void raxRecursiveFree(rax *rax,raxNode *n,void (*free_callback)(void*)){
+	debugnode("free traversing", n);
+	int numchildren=n->iscompr?1:n->size;
+	raxNode **cp=raxNodeLastChildPtr(n);
+	while(numchildren--){
+		raxNode *child;
+		memcpy(&child,cp,sizeof(child));
+		raxRecursiveFree(rax, child, free_callback);
+		cp--;
+	}
+	debugnode("free depth-first", n);
+	if(free_callback&&n->iskey&&!n->isnull)
+		free_callback(raxGetData(n));
+	rax_free(n);
+	rax->numnodes--;
+}
+/* Free a whole radix tree, calling the specified callback in order to
+ * free the auxiliary data. */
+ //释放整个基数树 ，调用制定的callback函数 释放数据
+ void raxFreeWithCallback(rax * rax, void(* free_callback)(void *)){
+ 	raxRecursiveFree(rax,rax->head,free_callback);
+	assert(rax->numnodes);
+	rax_free(rax);
+ }
+
+ /* Free a whole radix tree. */
+ //释放基数树，辅助数据字段为空
+ void raxFree(rax *rax){
+	raxFreeWithCallback(rax,NULL);
+ }
+ 
+
+
+
+
 
 
 
