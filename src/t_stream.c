@@ -68,6 +68,34 @@ void freeStream(stream *s){
         raxFreeWithCallback(s->cgroups,(void(*)(void*))streamFreeCG);
     zfree(s);
 }
+/* Generate the next stream item ID given the previous one. If the current
+ * milliseconds Unix time is greater than the previous one, just use this
+ * as time part and start with sequence part of zero. Otherwise we use the
+ * previous time (and never go backward) and increment the sequence. */
+ //根据给出的消息队列item的id，获取下个队列元素的id。如果当前unix时间的毫秒数
+ //大于给出的那个，则按照0开始计算。否则用之前的时间并且递增序列号
+ void streamNextID(streamID *last_id,streamID *new_id){
+	unit64_t ms=mstime();
+	if(ms>last_id->ms){  //当前时间大于消息队列中最大的ms
+		new_+id->ms=ms;
+		new_id=sequence=0;
+	}else{
+		new_id->ms=last_id->ms;
+		new_id->seq	=last_id->seq+1;
+	}
+ }
+ /* This is just a wrapper for lpAppend() to directly use a 64 bit integer
+ * instead of a string. */ 
+ //其实是对lpinsert的封装 不太理解？？
+unsigned char *lpAppendInteger(unsigned char *lp,int64_t value){
+	char buf[LONG_STR_SIZE];
+	int slen=ll2string(buf, sizeof(buf), value);
+	return lpAppend(lp,(unsigned char*)buf,slen);
+}
+
+ 
+
+
 /* -----------------------------------------------------------------------
  * Low level implementation of consumer groups 消费组的底层应用
  * ----------------------------------------------------------------------- */
