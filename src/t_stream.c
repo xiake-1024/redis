@@ -72,6 +72,16 @@ void freeStream(stream *s){
  * Low level implementation of consumer groups 消费组的底层应用
  * ----------------------------------------------------------------------- */
  
+ /* Create a NACK entry setting the delivery count to 1 and the delivery
+  * time to the current time. The NACK consumer will be set to the one
+  * specified as argument of the function. */
+ streamNACK *streamCreateNACK(streamConsumer *consumer) {
+	 streamNACK *nack = zmalloc(sizeof(*nack));
+	 nack->delivery_time = mstime();
+	 nack->delivery_count = 1;
+	 nack->consumer = consumer;
+	 return nack;
+ }
 
 
 
