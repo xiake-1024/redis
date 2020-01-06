@@ -42,16 +42,16 @@ static int aeApiCreate(aeEventLoop *eventLoop) {
     if (!state) return -1;
     state->events = zmalloc(sizeof(struct epoll_event)*eventLoop->setsize);
     if (!state->events) {
-        zfree(state);
+        zfree(state);  
         return -1;
-    }
-    state->epfd = epoll_create(1024); /* 1024 is just a hint for the kernel */
+    }  
+    state->epfd = epoll_create(1024); /* 1024 is just a hint for the kernel */ /* 调用epoll_create初始化epoll的epfd */
     if (state->epfd == -1) {
         zfree(state->events);
         zfree(state);
         return -1;
     }
-    eventLoop->apidata = state;
+    eventLoop->apidata = state;  //将创建好的epfd放到eventLoop结构体的apidata字段保管
     return 0;
 }
 
@@ -83,7 +83,7 @@ static int aeApiAddEvent(aeEventLoop *eventLoop, int fd, int mask) {
     if (mask & AE_READABLE) ee.events |= EPOLLIN;
     if (mask & AE_WRITABLE) ee.events |= EPOLLOUT;
     ee.data.fd = fd;
-    if (epoll_ctl(state->epfd,op,fd,&ee) == -1) return -1;
+    if (epoll_ctl(state->epfd,op,fd,&ee) == -1) return -1;  //调用epoll_ctl添加客户端连接事件
     return 0;
 }
 

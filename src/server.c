@@ -1918,13 +1918,13 @@ int listenToPort(int port, int *fds, int *count) {
     /* Force binding of 0.0.0.0 if no bind address is specified, always
      * entering the loop if j == 0. */
     if (server.bindaddr_count == 0) server.bindaddr[0] = NULL;
-    for (j = 0; j < server.bindaddr_count || j == 0; j++) {
-        if (server.bindaddr[j] == NULL) {
+    for (j = 0; j < server.bindaddr_count || j == 0; j++) { //遍历所有的ip地址
+        if (server.bindaddr[j] == NULL) { //还没有绑定地址
             int unsupported = 0;
             /* Bind * for both IPv6 and IPv4, we enter here only if
              * server.bindaddr_count == 0. */
             fds[*count] = anetTcp6Server(server.neterr,port,NULL,
-                server.tcp_backlog);
+                server.tcp_backlog); 
             if (fds[*count] != ANET_ERR) {
                 anetNonBlock(NULL,fds[*count]);
                 (*count)++;
@@ -2133,6 +2133,7 @@ void initServer(void) {
     /* Create an event handler for accepting new connections in TCP and Unix
      * domain sockets. */
     for (j = 0; j < server.ipfd_count; j++) {
+		//管理所有相关的事件描述字段、存储已注册的事件、已就绪的事件
         if (aeCreateFileEvent(server.el, server.ipfd[j], AE_READABLE,
             acceptTcpHandler,NULL) == AE_ERR)
             {
@@ -4161,7 +4162,7 @@ int main(int argc, char **argv) {
     int background = server.daemonize && !server.supervised;
     if (background) daemonize();
 
-    initServer();//初始化服务器数据结构
+    initServer();//初始化redis事件循环并调用epoll_create与epoll_ctl。创建socket、bind、listen、accept都在这个函数中进行调用，并注册调用后返回的监听描述符和连接描述符
     if (background || server.pidfile) createPidFile();
     redisSetProcTitle(argv[0]);
     redisAsciiArt();

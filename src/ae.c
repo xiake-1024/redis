@@ -46,6 +46,7 @@
 
 /* Include the best multiplexing layer supported by this system.
  * The following should be ordered by performances, descending. */
+//redis基于原有的select、poll与epoll机制，结合自己独特的业务需求，封装了自己的一套事件处理函数，我们把它叫做ae（a simple event-driven programming library）。而redis具体使用select、epoll还是mac上的kqueue技术，redis会首先进行判断，然后选择性能最优的那个
 #ifdef HAVE_EVPORT
 #include "ae_evport.c"
 #else
@@ -76,7 +77,7 @@ aeEventLoop *aeCreateEventLoop(int setsize) {
     eventLoop->maxfd = -1;
     eventLoop->beforesleep = NULL;
     eventLoop->aftersleep = NULL;
-    if (aeApiCreate(eventLoop) == -1) goto err;
+    if (aeApiCreate(eventLoop) == -1) goto err;  //调用aeApiCreate()，内部会调用epoll_create()
     /* Events with mask == AE_NONE are not set. So let's initialize the
      * vector with it. */
     for (i = 0; i < setsize; i++)
@@ -408,14 +409,14 @@ int aeProcessEvents(aeEventLoop *eventLoop, int flags)
 
         /* Call the multiplexing API, will return only on timeout or when
          * some event fires. */
-        numevents = aeApiPoll(eventLoop, tvp);
+        numevents = aeApiPoll(eventLoop, tvp); //调用epoll_wait()
 
         /* After sleep callback. */
         if (eventLoop->aftersleep != NULL && flags & AE_CALL_AFTER_SLEEP)
             eventLoop->aftersleep(eventLoop);
 
         for (j = 0; j < numevents; j++) {
-            aeFileEvent *fe = &eventLoop->events[eventLoop->fired[j].fd];
+            aeFileEvent *fe = &eventLoop->events[eventLoop->fired[j].fd];  //循环拿出所有就绪的事件
             int mask = eventLoop->fired[j].mask;
             int fd = eventLoop->fired[j].fd;
             int fired = 0; /* Number of events fired for current fd. */
@@ -440,12 +441,12 @@ int aeProcessEvents(aeEventLoop *eventLoop, int flags)
              * Fire the readable event if the call sequence is not
              * inverted. */
             if (!invert && fe->mask & mask & AE_READABLE) {
-                fe->rfileProc(eventLoop,fd,fe->clientData,mask);
+                fe->rfileProc(eventLoop,fd,fe->clientData,mask);  //如果该事件是读事件，调用读事件处理函数
                 fired++;
             }
 
             /* Fire the writable event. */
-            if (fe->mask & mask & AE_WRITABLE) {
+            if (fe->mask & mask & AE_WRITABLE) {  //如果该事件是写事件，调用写事件处理函数
                 if (!fired || fe->wfileProc != fe->rfileProc) {
                     fe->wfileProc(eventLoop,fd,fe->clientData,mask);
                     fired++;

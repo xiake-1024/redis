@@ -68,11 +68,12 @@ typedef void aeEventFinalizerProc(struct aeEventLoop *eventLoop, void *clientDat
 typedef void aeBeforeSleepProc(struct aeEventLoop *eventLoop);
 
 /* File event structure */
-typedef struct aeFileEvent {
+typedef struct 
+{
     int mask; /* one of AE_(READABLE|WRITABLE|BARRIER) */
-    aeFileProc *rfileProc;
-    aeFileProc *wfileProc;
-    void *clientData;
+    aeFileProc *rfileProc; //读事件处理程序
+    aeFileProc *wfileProc; //写事件处理程序
+    void *clientData; //客户端数据
 } aeFileEvent;
 
 /* Time event structure */
@@ -95,17 +96,17 @@ typedef struct aeFiredEvent {
 
 /* State of an event based program */
 typedef struct aeEventLoop {
-    int maxfd;   /* highest file descriptor currently registered */
+    int maxfd;   /* highest file descriptor currently registered */ 
     int setsize; /* max number of file descriptors tracked */
     long long timeEventNextId;
     time_t lastTime;     /* Used to detect system clock skew */
-    aeFileEvent *events; /* Registered events */
-    aeFiredEvent *fired; /* Fired events */
-    aeTimeEvent *timeEventHead;
-    int stop;
-    void *apidata; /* This is used for polling API specific data */
-    aeBeforeSleepProc *beforesleep;
-    aeBeforeSleepProc *aftersleep;
+    aeFileEvent *events; /* Registered events */ //存储已经注册的文件事件（文件事件即客户端连接与读写事件）
+    aeFiredEvent *fired; /* Fired events */   //存储已就绪的文件事件
+    aeTimeEvent *timeEventHead;    //存储时间事件
+    int stop;  //标识事件循环（即while(1)）是否结束
+    void *apidata; /* This is used for polling API specific data */  /* 存储epoll相关信息 */
+    aeBeforeSleepProc *beforesleep; //事件发生前需要调用的函数
+    aeBeforeSleepProc *aftersleep;   //事件发生后需要调用的函数
 } aeEventLoop;
 
 /* Prototypes */
