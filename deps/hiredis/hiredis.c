@@ -474,6 +474,17 @@ int redisFormatCommand(char **target, const char *format, ...) {
  * lengths. If the latter is set to NULL, strlen will be used to compute the
  * argument lengths.
  */
+ /*
+ * 使用Redis协议格式化命令，通过sds字符串保存，使用sdscatfmt函数追加
+ * 函数接收几个参数，参数数组以及参数长度数组
+ * 如果参数长度数组为NULL，参数长度会用strlen函数计算
+ * <参数数量> CR LF
+	$<参数 1 的字节数量> CR LF
+	<参数 1 的数据> CR LF
+	...
+	$<参数 N 的字节数量> CR LF
+	<参数 N 的数据> CR LF
+ */
 int redisFormatSdsCommandArgv(sds *target, int argc, const char **argv,
                               const size_t *argvlen)
 {
@@ -494,6 +505,7 @@ int redisFormatSdsCommandArgv(sds *target, int argc, const char **argv,
     }
 
     /* Use an SDS string for command construction */
+	//初始化sds字符串
     cmd = sdsempty();
     if (cmd == NULL)
         return -1;

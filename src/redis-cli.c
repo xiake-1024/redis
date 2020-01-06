@@ -1580,6 +1580,7 @@ static char **convertToSds(int count, char** args) {
 static int issueCommandRepeat(int argc, char **argv, long repeat) {
     while (1) {
         config.cluster_reissue_command = 0;
+		//将redis协议编码好的命令发送给服务器
         if (cliSendCommand(argc,argv,repeat) != REDIS_OK) {
             cliConnect(CC_FORCE);
 

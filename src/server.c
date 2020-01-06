@@ -4004,11 +4004,12 @@ int redisIsSupervised(int mode) {
     return 0;
 }
 
-
+//初始化server结构体,
 int main(int argc, char **argv) {
     struct timeval tv;
     int j;
 
+//各个功能的测试代码,可以自己封装,测试不同模块
 #ifdef REDIS_TEST
     if (argc == 3 && !strcasecmp(argv[1], "test")) {
         if (!strcasecmp(argv[2], "ziplist")) {
@@ -4035,11 +4036,11 @@ int main(int argc, char **argv) {
     }
 #endif
 
-    /* We need to initialize our libraries, and the server configuration. */
+    /* We need to initialize our libraries, and the server configuration. */ //不理解?
 #ifdef INIT_SETPROCTITLE_REPLACEMENT
     spt_init(argc, argv);
 #endif
-    setlocale(LC_COLLATE,"");
+    setlocale(LC_COLLATE,""); //进行地域设置
     tzset(); /* Populates 'timezone' global. */
     zmalloc_set_oom_handler(redisOutOfMemoryHandler);
     srand(time(NULL)^getpid());
@@ -4049,7 +4050,7 @@ int main(int argc, char **argv) {
     getRandomHexChars(hashseed,sizeof(hashseed));
     dictSetHashFunctionSeed((uint8_t*)hashseed);
     server.sentinel_mode = checkForSentinelMode(argc,argv);
-    initServerConfig();
+    initServerConfig();//初始化server结构体，设置默认值
     moduleInitModulesSystem();
 
     /* Store the executable path and arguments in a safe place in order
@@ -4137,7 +4138,7 @@ int main(int argc, char **argv) {
             exit(1);
         }
         resetServerSaveParams();
-        loadServerConfig(configfile,options);
+        loadServerConfig(configfile,options);//从配置文件加载参数
         sdsfree(options);
     }
 
@@ -4160,7 +4161,7 @@ int main(int argc, char **argv) {
     int background = server.daemonize && !server.supervised;
     if (background) daemonize();
 
-    initServer();
+    initServer();//初始化服务器数据结构
     if (background || server.pidfile) createPidFile();
     redisSetProcTitle(argv[0]);
     redisAsciiArt();
@@ -4197,7 +4198,7 @@ int main(int argc, char **argv) {
 
     aeSetBeforeSleepProc(server.el,beforeSleep);
     aeSetAfterSleepProc(server.el,afterSleep);
-    aeMain(server.el);
+    aeMain(server.el);//监听事件循环
     aeDeleteEventLoop(server.el);
     return 0;
 }
