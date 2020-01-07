@@ -77,7 +77,7 @@ typedef struct dictht{
 
 typedef struct dict{
 	dictType *type;
-	void *privdata;
+	void *privdata; /* 保存类型特定函数需要使用的参数 */
 	dictht ht[2];
 	long rehashidx;/* rehashing not in progress if rehashidx == -1 */
 	unsigned long iterators;/* number of iterators currently running */	
@@ -100,6 +100,7 @@ typedef struct dictIterator{
 #define dictHashKey(d,key) (d)->type->hasFunction(key)
 #define dictIsRehashing(d) ((d)->rehashidx !=-1)
 #define dictGetVal(he) ((he)->v.val)
+#define dictCompareKeys(d,key1,key2) (((d)->type->keyCompare)?(d)->type->keyCompare((d)->privdata,key1,key2):(key1)==(key2))
 
 //API
 

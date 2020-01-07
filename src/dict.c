@@ -87,8 +87,14 @@ static void _dictReset(dictht *ht){
  * guaranteed that this function will rehash even a single bucket, since it
  * will visit at max N*10 empty buckets in total, otherwise the amount of
  * work it does would be unbound and the function may block for a long time. */
+/* 实现渐进式的重新哈希，如果还有需要重新哈希的key，返回1，否则返回0
+ *
+ * 需要注意的是，rehash持续将bucket从老的哈希表移到新的哈希表，但是，因为有的哈希表是空的，
+ * 因此函数不能保证即使一个bucket也会被rehash，因为函数最多一共会访问N*10个空bucket，不然的话，函数将会耗费过多性能，而且函数会被阻塞一段时间
+ */
 
 int dictRehash(dict d,int n){
+	//一次rehash操作执行n*10个buckets
 	int empty_visits=n*10;/* Max number of empty buckets to visit. */
 	if(!dictIsRehashing(d))	return 0;
 	while(n--&&d->ht[0].used !=0){
@@ -230,10 +236,40 @@ dictEntry *dictNext(dictIterator *iter){
 		}
 	return NULL;
 }
+/* This function performs just a step of rehashing, and only if there are
+ * no safe iterators bound to our hash table. When we have iterators in the
+ * middle of a rehashing we can't mess with the two hash tables otherwise
+ * some element can be missed or duplicated.
+ *
+ * This function is called by common lookup or update operations in the
+ * dictionary so that the hash table automatically migrates from H1 to H2
+ * while it is actively used. */
+ static void _dictRehashStep(dict *d){
+ 	//有迭代器在执行不适用rehash，防止数据混乱
+	if(d->iterators==0) dictRehash(d,1);
+ }
+
 
 //字典中查找数据
 dictEntry *dictFind(dict *d,const void *key){
-	
+	dictEntry *he;
+	unit64_t h,idx,table;
+
+	if(d->ht[0].used+d->ht[1].used==0) return NULL;  //字典为空
+	if(dictIsRehashing(d)) _dictRehashStep(d);
+	h=dictHashKey(d, key);
+	for(table=0;table<=1;table++){
+		idx=h & d->ht[table].sizemask;
+		he=d->ht[table].table.idx;
+		while (he)
+		{
+			if(key==he->key||dictCompareKeys(d,key,he->key))
+				return he;
+			he=he->next;
+		}
+		if(!dictIsRehashing(d)) return NULL;
+	}
+	return NULL;
 }
 
 
