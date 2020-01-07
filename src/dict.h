@@ -99,10 +99,12 @@ typedef struct dictIterator{
 /* ------------------------------- Macros ------------------------------------*/
 #define dictHashKey(d,key) (d)->type->hasFunction(key)
 #define dictIsRehashing(d) ((d)->rehashidx !=-1)
+#define dictGetVal(he) ((he)->v.val)
 
 //API
 
 int dictRehash(dict *d,int n);
+void *dictFetchValue(dict *d,const void *key);
 
 #endif
 

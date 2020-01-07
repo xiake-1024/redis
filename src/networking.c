@@ -90,6 +90,7 @@ client *createClient(int fd) {
      * This is useful since all the commands needs to be executed
      * in the context of a client. When commands are executed in other
      * contexts (for instance a Lua script) we need a non connected client. */
+      //设置fd为非阻塞；非延迟（epoll等坚挺的额socket必须是非阻塞；延迟的话发送的数据会先存储在tcp缓冲区，等到一定事件或数据量大时才会发送）
     if (fd != -1) {
         anetNonBlock(NULL,fd);
         anetEnableTcpNoDelay(NULL,fd);
@@ -107,6 +108,7 @@ client *createClient(int fd) {
     selectDb(c,0);
     uint64_t client_id;
     atomicGetIncr(server.next_client_id,client_id,1);
+	//初始化client结构体各字段
     c->id = client_id;
     c->fd = fd;
     c->name = NULL;
@@ -663,6 +665,7 @@ int clientHasPendingReplies(client *c) {
 #define MAX_ACCEPTS_PER_CALL 1000
 static void acceptCommonHandler(int fd, int flags, char *ip) {
     client *c;
+	//创建客户端
     if ((c = createClient(fd)) == NULL) {
         serverLog(LL_WARNING,
             "Error registering fd event for the new client: %s (fd=%d)",
@@ -739,6 +742,7 @@ void acceptTcpHandler(aeEventLoop *el, int fd, void *privdata, int mask) {
     UNUSED(privdata);
 
     while(max--) {
+		//接收客户端链接请求
         cfd = anetTcpAccept(server.neterr, fd, cip, sizeof(cip), &cport);
         if (cfd == ANET_ERR) {
             if (errno != EWOULDBLOCK)
@@ -1446,6 +1450,7 @@ void processInputBuffer(client *c) {
         if (c->flags & (CLIENT_CLOSE_AFTER_REPLY|CLIENT_CLOSE_ASAP)) break;
 
         /* Determine request type when unknown. */
+		//判断命令请求类型；telnet发送的命令和redis-cli发送的命令请求格式不同
         if (!c->reqtype) {
             if (c->querybuf[c->qb_pos] == '*') {
                 c->reqtype = PROTO_REQ_MULTIBULK;
@@ -1463,9 +1468,12 @@ void processInputBuffer(client *c) {
         }
 
         /* Multibulk processing could see a <= 0 length. */
+		//参数个数为0时
         if (c->argc == 0) {
+			//resetClient()函数会释放client结构体arg字段中的各参数，重置argc为0
             resetClient(c);
         } else {
+	        //处理命令
             /* Only reset the client when the command was executed. */
             if (processCommand(c) == C_OK) {
                 if (c->flags & CLIENT_MASTER && !(c->flags & CLIENT_MULTI)) {
@@ -1540,8 +1548,10 @@ void readQueryFromClient(aeEventLoop *el, int fd, void *privdata, int mask) {
     }
 
     qblen = sdslen(c->querybuf);
+	//统计	
     if (c->querybuf_peak < qblen) c->querybuf_peak = qblen;
     c->querybuf = sdsMakeRoomFor(c->querybuf, readlen);
+	//读取
     nread = read(fd, c->querybuf+qblen, readlen);
     if (nread == -1) {
         if (errno == EAGAIN) {

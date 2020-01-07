@@ -134,6 +134,8 @@ int dictRehash(dict d,int n){
 	//继续下次rehash
 	return 1;
 }
+
+
 /* A fingerprint is a 64 bit number that represents the state of the dictionary
  * at a given time, it's just a few dict properties xored together.
  * When an unsafe iterator is initialized, we get the dict fingerprint, and check
@@ -229,6 +231,19 @@ dictEntry *dictNext(dictIterator *iter){
 	return NULL;
 }
 
+//字典中查找数据
+dictEntry *dictFind(dict *d,const void *key){
+	
+}
+
+
+
+void *dictFetchValue(dict * d, const void * key){
+	dictEntry *he;
+
+	he=dictFind(d,key);  //返回值赋值给节点
+	return he?dictGetVal(he):NULL;
+}
 /* ------------------------------- Debugging ---------------------------------*/
 /* ------------------------------- Benchmark ---------------------------------*/
 #endif
