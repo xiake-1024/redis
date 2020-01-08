@@ -636,6 +636,7 @@ struct evictionPoolEntry; /* Defined in evict.c */
 
 /* This structure is used in order to represent the output buffer of a client,
  * which is actually a linked list of blocks like that, that is: client->reply. */
+ //链表中的节点
 typedef struct clientReplyBlock {
     size_t size, used;
     char buf[];

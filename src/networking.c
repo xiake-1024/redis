@@ -211,26 +211,39 @@ void clientInstallWriteHandler(client *c) {
  * Typically gets called every time a reply is built, before adding more
  * data to the clients output buffers. If the function returns C_ERR no
  * data should be appended to the output buffers. */
+ //prepareClientToWrite 判断是否需要返回数据，并且将当前 client 添加到等待写返回数据队列中。
+ /*prepareClientToWrite 首先判断了当前 client是否需要返回数据：
+Lua 脚本执行的 client 则需要返回值；
+如果客户端发送来 REPLY OFF 或者 SKIP 命令，则不需要返回值；
+如果是主从复制时的主实例 client，则不需要返回值；
+当前是在 AOF loading 状态的假 client，则不需要返回值。*/
 int prepareClientToWrite(client *c) {
     /* If it's the Lua client we always return ok without installing any
      * handler since there is no socket at all. */
+      // 如果是 lua client 则直接OK
     if (c->flags & (CLIENT_LUA|CLIENT_MODULE)) return C_OK;
 
     /* CLIENT REPLY OFF / SKIP handling: don't send replies. */
+	 // 客户端发来过 REPLY OFF 或者 SKIP 命令，不需要发送返回值
     if (c->flags & (CLIENT_REPLY_OFF|CLIENT_REPLY_SKIP)) return C_ERR;
 
     /* Masters don't receive replies, unless CLIENT_MASTER_FORCE_REPLY flag
      * is set. */
+
+	// 将client加入到等待写入返回值队列中，下次事件周期会进行返回值写入。
     if ((c->flags & CLIENT_MASTER) &&
         !(c->flags & CLIENT_MASTER_FORCE_REPLY)) return C_ERR;
 
+	// AOF loading 时的假client 不需要返回值
     if (c->fd <= 0) return C_ERR; /* Fake client for AOF loading. */
 
     /* Schedule the client to write the output buffers to the socket, unless
      * it should already be setup to do so (it has already pending data). */
+     // 设置标志位并且将client加入到 clients_pending_write 队列中
     if (!clientHasPendingReplies(c)) clientInstallWriteHandler(c);
 
     /* Authorize the caller to queue in the output buffer of this client. */
+	// 表示已经在排队，进行返回数据
     return C_OK;
 }
 
@@ -301,6 +314,7 @@ void addReply(client *c, robj *obj) {
     if (prepareClientToWrite(c) != C_OK) return;
 
     if (sdsEncodedObject(obj)) {
+		// 需要将响应内容添加到output buffer中。总体思路是，先尝试向固定buffer添加，添加失败的话，在尝试添加到响应链表
         if (_addReplyToBuffer(c,obj->ptr,sdslen(obj->ptr)) != C_OK)
             _addReplyStringToList(c,obj->ptr,sdslen(obj->ptr));
     } else if (obj->encoding == OBJ_ENCODING_INT) {
@@ -980,25 +994,31 @@ client *lookupClientByID(uint64_t id) {
 
 /* Write data in output buffers to client. Return C_OK if the client
  * is still valid after the call, C_ERR if it was freed. */
+ // 将输出缓冲区中的数据写入socket，如果还有数据未处理则返回C_OK
 int writeToClient(int fd, client *c, int handler_installed) {
     ssize_t nwritten = 0, totwritten = 0;
     size_t objlen;
     clientReplyBlock *o;
-
+	
+	// 仍然有数据未写入
     while(clientHasPendingReplies(c)) {
-        if (c->bufpos > 0) {
+        if (c->bufpos > 0) {   // 如果缓冲区有数据
+	        // 写入到 fd 代表的 socket 中
             nwritten = write(fd,c->buf+c->sentlen,c->bufpos-c->sentlen);
             if (nwritten <= 0) break;
             c->sentlen += nwritten;
+			// 统计本次一共输出了多少子节
             totwritten += nwritten;
 
             /* If the buffer was sent, set bufpos to zero to continue with
              * the remainder of the reply. */
+             // buffer中的数据已经发送，则重置标志位，让响应的后续数据写入buffe
             if ((int)c->sentlen == c->bufpos) {
                 c->bufpos = 0;
                 c->sentlen = 0;
             }
         } else {
+	         // 缓冲区没有数据，从reply队列中拿
             o = listNodeValue(listFirst(c->reply));
             objlen = o->used;
 
@@ -1007,13 +1027,14 @@ int writeToClient(int fd, client *c, int handler_installed) {
                 listDelNode(c->reply,listFirst(c->reply));
                 continue;
             }
-
+			// 将队列中的数据写入 socket
             nwritten = write(fd, o->buf + c->sentlen, objlen - c->sentlen);
             if (nwritten <= 0) break;
             c->sentlen += nwritten;
             totwritten += nwritten;
 
             /* If we fully sent the object on head go to the next one */
+			// 如果写入成功，则删除队列
             if (c->sentlen == objlen) {
                 c->reply_bytes -= o->size;
                 listDelNode(c->reply,listFirst(c->reply));
@@ -1036,6 +1057,7 @@ int writeToClient(int fd, client *c, int handler_installed) {
          * Moreover, we also send as much as possible if the client is
          * a slave (otherwise, on high-speed traffic, the replication
          * buffer will grow indefinitely) */
+          // 如果输出的字节数量已经超过NET_MAX_WRITES_PER_EVENT限制，break
         if (totwritten > NET_MAX_WRITES_PER_EVENT &&
             (server.maxmemory == 0 ||
              zmalloc_used_memory() < server.maxmemory) &&
@@ -1059,10 +1081,11 @@ int writeToClient(int fd, client *c, int handler_installed) {
          * We just rely on data / pings received for timeout detection. */
         if (!(c->flags & CLIENT_MASTER)) c->lastinteraction = server.unixtime;
     }
-    if (!clientHasPendingReplies(c)) {
+    if (!clientHasPendingReplies(c)) {  //数据已经全部输出
         c->sentlen = 0;
+		 //如果内容已经全部输出，删除事件处理器
         if (handler_installed) aeDeleteFileEvent(server.el,c->fd,AE_WRITABLE);
-
+		 // 数据全部返回，则关闭client和连接
         /* Close connection after entire reply has been sent. */
         if (c->flags & CLIENT_CLOSE_AFTER_REPLY) {
             freeClient(c);
@@ -1083,12 +1106,15 @@ void sendReplyToClient(aeEventLoop *el, int fd, void *privdata, int mask) {
  * we can just write the replies to the client output buffer without any
  * need to use a syscall in order to install the writable event handler,
  * get it called, and so forth. */
+ // 直接将返回值写到client的输出缓冲区中，不需要进行系统调用，也不需要注册写事件处理器
 int handleClientsWithPendingWrites(void) {
     listIter li;
     listNode *ln;
+	 // 获取系统延迟写队列的长度
     int processed = listLength(server.clients_pending_write);
 
     listRewind(server.clients_pending_write,&li);
+	 // 依次处理
     while((ln = listNext(&li))) {
         client *c = listNodeValue(ln);
         c->flags &= ~CLIENT_PENDING_WRITE;
@@ -1099,10 +1125,12 @@ int handleClientsWithPendingWrites(void) {
         if (c->flags & CLIENT_PROTECTED) continue;
 
         /* Try to write buffers to the client socket. */
+		 // 将缓冲值写入client的socket中，如果写完，则跳过之后的操作。
         if (writeToClient(c->fd,c,0) == C_ERR) continue;
 
         /* If after the synchronous writes above we still have data to
          * output to the client, we need to install the writable handler. */
+          // 还有数据未写入，只能注册写事件处理器了
         if (clientHasPendingReplies(c)) {
             int ae_flags = AE_WRITABLE;
             /* For the fsync=always policy, we want that a given FD is never
@@ -1115,6 +1143,7 @@ int handleClientsWithPendingWrites(void) {
             {
                 ae_flags |= AE_BARRIER;
             }
+				 // 注册写事件处理器 sendReplyToClient，等待执行
             if (aeCreateFileEvent(server.el, c->fd, ae_flags,
                 sendReplyToClient, c) == AE_ERR)
             {

@@ -497,8 +497,15 @@ int aeWait(int fd, int mask, long long milliseconds) {
 void aeMain(aeEventLoop *eventLoop) {
     eventLoop->stop = 0;
     while (!eventLoop->stop) {
+		 /* 如果有需要在事件处理前执行的函数，那么执行它 */
+	/*beforeSleep 函数会调用 handleClientsWithPendingWrites 函数来处理 clients_pending_write 列表。
+	handleClientsWithPendingWrites 方法会遍历 clients_pending_write 列表，对于每个 client 都会先调用 
+	writeToClient 方法来尝试将返回数据从输出缓存区写入到 socekt中，如果还未写完，则只能调用 aeCreateFileEvent 方法来注册一个写数据事件处理器 
+	sendReplyToClient，等待 Redis 事件机制的再次调用。这样的好处是对于返回数据较少的客户端，不需要麻烦的注册写数据事件，等待事件触发再写数据到 socket，
+	而是在下一次事件循环周期就直接将数据写到 socket中，加快了数据返回的响应速度。*/
         if (eventLoop->beforesleep != NULL)
             eventLoop->beforesleep(eventLoop);
+		/* 开始处理事件*/
         aeProcessEvents(eventLoop, AE_ALL_EVENTS|AE_CALL_AFTER_SLEEP);
     }
 }

@@ -52,21 +52,29 @@ void updateLFU(robj *val) {
 /* Low level key lookup API, not actually called directly from commands
  * implementations that should instead rely on lookupKeyRead(),
  * lookupKeyWrite() and lookupKeyReadWithFlags(). */
+ //lookupKey 方法则是通过 dictFind 方法从 redisDb 的 dict 哈希表中查找键值，
+ //如果能找到，则根据 redis 的 maxmemory_policy 策略来判断是更新 lru 的最近访问时间
+// ，还是调用 updateFU 方法更新其他指标，这些指标可以在后续内存不足时对键值进行回收。
 robj *lookupKey(redisDb *db, robj *key, int flags) {
+	// dictFind 根据 key 获取字典的entry
     dictEntry *de = dictFind(db->dict,key->ptr);
     if (de) {
+		// 获取 value
         robj *val = dictGetVal(de);
 
         /* Update the access time for the ageing algorithm.
          * Don't do it if we have a saving child, as this will trigger
          * a copy on write madness. */
+         // 当处于 rdb aof 子进程复制阶段或者 flags 不是 LOOKUP_NOTOUCH
         if (server.rdb_child_pid == -1 &&
             server.aof_child_pid == -1 &&
             !(flags & LOOKUP_NOTOUCH))
         {
+	        // 如果是 MAXMEMORY_FLAG_LFU 则进行相应操作
             if (server.maxmemory_policy & MAXMEMORY_FLAG_LFU) {
                 updateLFU(val);
             } else {
+	             // 更新最近访问时间
                 val->lru = LRU_CLOCK();
             }
         }
@@ -97,6 +105,13 @@ robj *lookupKey(redisDb *db, robj *key, int flags) {
  * for read operations. Even if the key expiry is master-driven, we can
  * correctly report a key is expired on slaves even if the master is lagging
  * expiring our key via DELs in the replication link. */
+ /*
+ * 查找key的读操作，如果key找不到或者已经逻辑上过期返回 NULL，有一些副作用
+ *   1 如果key到达过期时间，它会被设备为过期，并且删除
+ *   2 更新key的最近访问时间
+ *   3 更新全局缓存击中概率
+ * flags 有两个值: LOOKUP_NONE 一般都是这个；LOOKUP_NOTOUCH 不修改最近访问时间
+ */
 robj *lookupKeyReadWithFlags(redisDb *db, robj *key, int flags) {
     robj *val;
 
@@ -130,6 +145,7 @@ robj *lookupKeyReadWithFlags(redisDb *db, robj *key, int flags) {
             return NULL;
         }
     }
+	// 查找键值字典
     val = lookupKey(db,key,flags);
     if (val == NULL)
         server.stat_keyspace_misses++;
@@ -1128,7 +1144,11 @@ void propagateExpire(redisDb *db, robj *key, int lazy) {
 
 /* Check if the key is expired. */
 int keyIsExpired(redisDb *db, robj *key) {
+	// 获取键的过期时间
+
     mstime_t when = getExpire(db,key);
+
+	
 
     if (when < 0) return 0; /* No expire for this key */
 
@@ -1140,8 +1160,13 @@ int keyIsExpired(redisDb *db, robj *key) {
      * only the first time it is accessed and not in the middle of the
      * script execution, making propagation to slaves / AOF consistent.
      * See issue #1525 on Github for more information. */
+     /*
+     * 如果当前是在执行lua脚本，根据其原子性，整个执行过期中时间都按照其开始执行的那一刻计算
+     * 也就是说lua执行时未过期的键，在它整个执行过程中也都不会过期。
+     */ 
     mstime_t now = server.lua_caller ? server.lua_time_start : mstime();
 
+	// slave 直接返回键是否过期
     return now > when;
 }
 
@@ -1164,6 +1189,13 @@ int keyIsExpired(redisDb *db, robj *key) {
  *
  * The return value of the function is 0 if the key is still valid,
  * otherwise the function returns 1 if the key is expired. */
+ /*
+ * 在调用 lookupKey*系列方法前调用该方法。
+ * 如果是slave：
+ *  slave 并不主动过期删除key，但是返回值仍然会返回键已经被删除。
+ *  master 如果key过期了，会主动删除过期键，并且触发 AOF 和同步操作。
+ * 返回值为0表示键仍然有效，否则返回1
+ */
 int expireIfNeeded(redisDb *db, robj *key) {
     if (!keyIsExpired(db,key)) return 0;
 
@@ -1175,13 +1207,18 @@ int expireIfNeeded(redisDb *db, robj *key) {
      * Still we try to return the right information to the caller,
      * that is, 0 if we think the key should be still valid, 1 if
      * we think the key is expired at this time. */
+      // slave 直接返回键是否过期
     if (server.masterhost != NULL) return 1;
 
     /* Delete the key */
+	// 键过期，删除键
     server.stat_expiredkeys++;
+	// 触发命令传播
     propagateExpire(db,key,server.lazyfree_lazy_expire);
+	// 和键空间事件
     notifyKeyspaceEvent(NOTIFY_EXPIRED,
         "expired",key,db->id);
+	  // 根据是否懒删除，调用不同的函数 
     return server.lazyfree_lazy_expire ? dbAsyncDelete(db,key) :
                                          dbSyncDelete(db,key);
 }

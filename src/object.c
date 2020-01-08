@@ -695,9 +695,9 @@ int getLongLongFromObject(robj *o, long long *target) {
         value = 0;
     } else {
         serverAssertWithInfo(NULL,o,o->type == OBJ_STRING);
-        if (sdsEncodedObject(o)) {
+        if (sdsEncodedObject(o)) { //如果是字符串将类型转换为long long形
             if (string2ll(o->ptr,sdslen(o->ptr),&value) == 0) return C_ERR;
-        } else if (o->encoding == OBJ_ENCODING_INT) {
+        } else if (o->encoding == OBJ_ENCODING_INT) {  //整数直接处理
             value = (long)o->ptr;
         } else {
             serverPanic("Unknown string encoding");
@@ -710,7 +710,7 @@ int getLongLongFromObject(robj *o, long long *target) {
 int getLongLongFromObjectOrReply(client *c, robj *o, long long *target, const char *msg) {
     long long value;
     if (getLongLongFromObject(o, &value) != C_OK) {
-        if (msg != NULL) {
+        if (msg != NULL) { //如果消息存在按照指定消息返回客户端信息
             addReplyError(c,(char*)msg);
         } else {
             addReplyError(c,"value is not an integer or out of range");
