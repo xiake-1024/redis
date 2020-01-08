@@ -1022,8 +1022,8 @@ int writeToClient(int fd, client *c, int handler_installed) {
             o = listNodeValue(listFirst(c->reply));
             objlen = o->used;
 
-            if (objlen == 0) {
-                c->reply_bytes -= o->size;
+            if (objlen == 0) {//该节点没有发送的，不发送
+                c->reply_bytes -= o->size; //记录reply中list内容字节的变量，减去该几点长度
                 listDelNode(c->reply,listFirst(c->reply));
                 continue;
             }
@@ -1038,10 +1038,10 @@ int writeToClient(int fd, client *c, int handler_installed) {
             if (c->sentlen == objlen) {
                 c->reply_bytes -= o->size;
                 listDelNode(c->reply,listFirst(c->reply));
-                c->sentlen = 0;
+                c->sentlen = 0; //当前节点操作完成,写入成功将当前写入状态置空
                 /* If there are no longer objects in the list, we expect
                  * the count of reply bytes to be exactly zero. */
-                if (listLength(c->reply) == 0)
+                if (listLength(c->reply) == 0)  
                     serverAssert(c->reply_bytes == 0);
             }
         }
@@ -1057,15 +1057,15 @@ int writeToClient(int fd, client *c, int handler_installed) {
          * Moreover, we also send as much as possible if the client is
          * a slave (otherwise, on high-speed traffic, the replication
          * buffer will grow indefinitely) */
-          // 如果输出的字节数量已经超过NET_MAX_WRITES_PER_EVENT限制，break
+          // 如果输出的字节数量已经超过NET_MAX_WRITES_PER_EVENT限制，break  输出缓冲区超限
         if (totwritten > NET_MAX_WRITES_PER_EVENT &&
             (server.maxmemory == 0 ||
              zmalloc_used_memory() < server.maxmemory) &&
             !(c->flags & CLIENT_SLAVE)) break;
     }
-    server.stat_net_output_bytes += totwritten;
+    server.stat_net_output_bytes += totwritten;//统计字段
     if (nwritten == -1) {
-        if (errno == EAGAIN) {
+        if (errno == EAGAIN) {//ead函数会返回一个错误EAGAIN，提示你的应用程序现在没有数据可读请稍后再试。
             nwritten = 0;
         } else {
             serverLog(LL_VERBOSE,
@@ -1082,7 +1082,7 @@ int writeToClient(int fd, client *c, int handler_installed) {
         if (!(c->flags & CLIENT_MASTER)) c->lastinteraction = server.unixtime;
     }
     if (!clientHasPendingReplies(c)) {  //数据已经全部输出
-        c->sentlen = 0;
+        c->sentlen = 0; //置位
 		 //如果内容已经全部输出，删除事件处理器
         if (handler_installed) aeDeleteFileEvent(server.el,c->fd,AE_WRITABLE);
 		 // 数据全部返回，则关闭client和连接
