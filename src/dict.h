@@ -96,16 +96,26 @@ typedef struct dictIterator{
 	long long fingerprint;//dict.c里的dictFingerprint(),不安全迭代器相关
 } dictIterator;
 
+
+/* This is the initial size of every hash table */
+//hash表的初始大小
+#define DICT_HT_INITIAL_SIZE     4
+
 /* ------------------------------- Macros ------------------------------------*/
 #define dictHashKey(d,key) (d)->type->hasFunction(key)
 #define dictIsRehashing(d) ((d)->rehashidx !=-1)
 #define dictGetVal(he) ((he)->v.val)
 #define dictCompareKeys(d,key1,key2) (((d)->type->keyCompare)?(d)->type->keyCompare((d)->privdata,key1,key2):(key1)==(key2))
+//如果支持valDup，则使用将privdata和val作为参数生成val，否则直接使用val
+#define dictSetVal(d,entry,_val_) do { if((d)->type->valDup) (entry)->v.val=(d)->type->valDup((d)->privdata,_val_); else (entry)->v.val=(_val_); }while(0)
+#define dictSetKey(d,entry,_key_) do { if((d)->type->valDup) (entry)->v.key=(d)->type->valDup((d)->privdata,_key_); else (entry)->v.key=(_key_); }while(0)
+
 
 //API
 
 int dictRehash(dict *d,int n);
 void *dictFetchValue(dict *d,const void *key);
+int dictAdd(dict *d,void *key,void *val);
 
 #endif
 

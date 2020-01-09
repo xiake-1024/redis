@@ -59,11 +59,12 @@
  * Note that even when dict_can_resize is set to 0, not all resizes are
  * prevented: a hash table is still allowed to grow if the ratio between
  * the number of elements and the buckets > dict_force_resize_ratio. */
-static int dict_can_resize = 1;
-static unsigned int dict_force_resize_ratio = 5;
+static int dict_can_resize = 1;  //允许扩容
+static unsigned int dict_force_resize_ratio = 5; //已经达到必须扩容的比列了  used/size
 
 /* -------------------------- private prototypes ---------------------------- */
-
+static int _dictExpandIfNeeded(dict *ht);
+static long _dictKeyIndex(dict *ht,const void *key,unit64_t hash,dictEntry **existing);
 
 
 /* -------------------------- hash functions -------------------------------- */
@@ -78,6 +79,44 @@ static void _dictReset(dictht *ht){
 	ht->sizemask=0;
 	ht->used=0;
 }
+/* Expand or create the hash table */
+//对字典进行扩容或者创建一个新的字典
+int dictExpand(dict *d,unsigned long size){
+	  /* the size is invalid if it is smaller than the number of
+     * elements already inside the hash table */
+     // 扩容大小必须大于使用的
+     if(dictIsRehashing(d)||d->ht[0].used>size)
+	 		return DICT_ERR;
+	 dictht n; /* the new hash table *///新字典表
+
+	unsigned long realsize=_dictNextPower(size);
+	 /* Rehashing to the same table size is not useful. */
+	 //重新生成一个相同容量的表没有意义
+	 if(realsize==d->ht[0].size) return DICT_ERR;
+
+	  /* Allocate the new hash table and initialize all pointers to NULL */
+	 //用null，对新表进行初始化
+	 n.size=realsize;
+	  n.sizemask=realsize-1; //掩码用于计算hash值
+	  n.table=zcalloc(realsize*sizeof(dictEntry*));
+	  n.used=0;
+
+	 /* Is this the first initialization? If so it's not really a rehashing
+     * we just set the first hash table so that it can accept keys. */
+     //如果是第一次进行初始化,直接将分配的空间给新字典
+     if(d->ht[0].table==NULL){
+		d->ht[0]=n;
+		return DICT_OK;
+	 }
+
+	  /* Prepare a second hash table for incremental rehashing */
+	 //准备在reshsh节点，进行扩容
+	 d->ht[1]=n;
+	 d->rehashidx=0;
+	 return DICT_OK;
+}
+
+
 /* Performs N steps of incremental rehashing. Returns 1 if there are still
  * keys to move from the old to the new hash table, otherwise 0 is returned.
  *
@@ -272,6 +311,61 @@ dictEntry *dictFind(dict *d,const void *key){
 	return NULL;
 }
 
+/* Add an element to the target hash table */
+//向dict中添加元素
+int dictAdd(dict *d,void *key,void *val){
+	dictEntry *entry =dictAddRaw();
+	if(!key) return DICT_ERR;
+	dictSetVal(d,entry,val);
+	return DICT_OK;
+}
+/* Low level add or find:
+ * This function adds the entry but instead of setting a value returns the
+ * dictEntry structure to the user, that will make sure to fill the value
+ * field as he wishes.
+ *
+ * This function is also directly exposed to the user API to be called
+ * mainly in order to store non-pointers inside the hash value, example:
+ *
+ * entry = dictAddRaw(dict,mykey,NULL);
+ * if (entry != NULL) dictSetSignedIntegerVal(entry,1000);
+ *
+ * Return values:
+ *
+ * If key already exists NULL is returned, and "*existing" is populated
+ * with the existing entry if existing is not NULL.
+ *
+ * If key was added, the hash entry is returned to be manipulated by the caller.
+ */
+ //existing存储查找的节点
+ dictEntry *dictAddRaw(dict *d,void *key,dictEntry **existing)
+{
+	long index;
+	dictEntry *entry;
+	dictht *ht;
+
+	if(dictIsRehashing(d)) _dictRehashStep(d);
+	/* Get the index of the new element, or -1 if
+     * the element already exists. */
+     //返回指定key的索引，如果key已经存在返回-1
+     if((index=_dictKeyIndex(d,key,dictHashKey(d, key),existing))==-1){
+		return NULL;
+	 }
+	 /* Allocate the memory and store the new entry.
+		  * Insert the element in top, with the assumption that in a database
+		  * system it is more likely that recently added entries are accessed
+		  * more frequently. */
+	ht=dictIsRehashing(d)?&d-ht[1]:&d->ht[0];//如果正在rehash直接加到第二个链表
+	entry=zmalloc(sizeof(*entry)) ;
+	entry->next=ht->table[index];//添加到链表第一个
+	ht->table[index]=entry;
+	ht->used++;
+
+	/* Set the hash entry fields. */
+	dictSetKey(d,entry,key);
+	return entry;
+	 
+}
 
 
 void *dictFetchValue(dict * d, const void * key){
@@ -280,6 +374,63 @@ void *dictFetchValue(dict * d, const void * key){
 	he=dictFind(d,key);  //返回值赋值给节点
 	return he?dictGetVal(he):NULL;
 }
+
+/* ------------------------- private functions ------------------------------ */
+/* Expand the hash table if needed */
+static int _dictExpandIfNeeded(dict *ht){
+	/* Incremental rehashing already in progress. Return. */
+	//正在rehash操作
+	if(dictIsRehashing(d)) return DICT_OK;
+	 /* If the hash table is empty expand it to the initial size. */
+	//hash表为空，初始化
+	if(d->ht[0].size==0) return dictExpand(d,DICT_HT_INITIAL_SIZE);
+
+	/* If we reached the 1:1 ratio, and we are allowed to resize the hash
+		* table (global setting) or we should avoid it but the ratio between
+		* elements/buckets is over the "safe" threshold, we resize doubling
+		* the number of buckets. */
+	if(d->ht[0].used>=d->ht[0].size
+		&&(dict_can_resize||d->ht[0].used/d->ht[0].size>dict_force_resize_ratio)){
+		return dictExpand(d,d->ht[0].used*2);
+	}
+	return DICT_OK;		
+}
+
+/* Returns the index of a free slot that can be populated with
+ * a hash entry for the given 'key'.
+ * If the key already exists, -1 is returned
+ * and the optional output parameter may be filled.
+ *
+ * Note that if we are in the process of rehashing the hash table, the
+ * index is always returned in the context of the second (new) hash table. */
+ static long _dictKeyIndex(dict *d,const void *key,unit64_t hash,dictEntry **existing){
+	unsigned long idx,Table;
+	dictEntry *he;
+	if(existing) *existing=NULL; //存地址的容器存在，内容赋初值
+
+  /* Expand the hash table if needed */
+  //检查有无扩容需要并扩容
+	if(_dictExpandIfNeeded(d)==DICT_ERR)
+		return -1;
+
+	for(table=0;table<=1;table++){
+		idx =hash&d->ht[table].sizemask; //对hash值取余操作，获得索引
+		/* Search if this slot does not already contain the given key */
+		//查找看看地点中有无该key
+		he=d->ht[table].tabel[idx];
+		while(he){
+			if(key==he->key||dictCompareKeys(d, key1, key2)){ //直接相等或者按照给定函数计算出来的数值相等.
+				if(existing) *existing=he;  //如果有容器存该地址
+				return -1;
+			}
+			he=he->next;  //有可能hash冲突，不同的key相同的索引
+		}
+		if(!dictIsRehashing(d)) break; //如果没有rehash 第二张表不必检测
+	}
+	return idx;
+ }
+
+
 /* ------------------------------- Debugging ---------------------------------*/
 /* ------------------------------- Benchmark ---------------------------------*/
 #endif

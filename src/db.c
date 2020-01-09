@@ -136,6 +136,7 @@ robj *lookupKeyReadWithFlags(redisDb *db, robj *key, int flags) {
          * will say the key as non existing.
          *
          * Notably this covers GETs when slaves are used to scale reads. */
+         //server是slave,client是master，命令为只读
         if (server.current_client &&
             server.current_client != server.master &&
             server.current_client->cmd &&
@@ -169,13 +170,14 @@ robj *lookupKeyWrite(redisDb *db, robj *key) {
     expireIfNeeded(db,key);
     return lookupKey(db,key,LOOKUP_NONE);
 }
-
+//封装了lookupKeyRead，当查找不到key是返回客户端指定reply，用于读命令的调用
 robj *lookupKeyReadOrReply(client *c, robj *key, robj *reply) {
     robj *o = lookupKeyRead(c->db, key);
     if (!o) addReply(c,reply);
     return o;
 }
 
+//封装了lookupKey，增加了过期判断，用于写命令的调用
 robj *lookupKeyWriteOrReply(client *c, robj *key, robj *reply) {
     robj *o = lookupKeyWrite(c->db, key);
     if (!o) addReply(c,reply);
@@ -186,6 +188,7 @@ robj *lookupKeyWriteOrReply(client *c, robj *key, robj *reply) {
  * counter of the value if needed.
  *
  * The program is aborted if the key already exists. */
+ //添加键值队到数据库
 void dbAdd(redisDb *db, robj *key, robj *val) {
     sds copy = sdsdup(key->ptr);
     int retval = dictAdd(db->dict, copy, val);
@@ -1198,7 +1201,7 @@ int keyIsExpired(redisDb *db, robj *key) {
  */
 int expireIfNeeded(redisDb *db, robj *key) {
     if (!keyIsExpired(db,key)) return 0;
-
+	//键已经过期
     /* If we are running in the context of a slave, instead of
      * evicting the expired key from the database, we return ASAP:
      * the slave key expiration is controlled by the master that will
