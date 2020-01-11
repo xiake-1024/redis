@@ -39,4 +39,4 @@ void bioKillThreads(void);
 #define BIO_CLOSE_FILE    0 /* Deferred close(2) syscall. */
 #define BIO_AOF_FSYNC     1 /* Deferred AOF fsync. */
 #define BIO_LAZY_FREE     2 /* Deferred objects freeing. */
-#define BIO_NUM_OPS       3
+#define BIO_NUM_OPS       3   //总共是三种各类型的队列

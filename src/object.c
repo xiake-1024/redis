@@ -365,7 +365,7 @@ void decrRefCount(robj *o) {
         zfree(o);
     } else {
         if (o->refcount <= 0) serverPanic("decrRefCount against refcount <= 0");
-        if (o->refcount != OBJ_SHARED_REFCOUNT) o->refcount--;
+        if (o->refcount != OBJ_SHARED_REFCOUNT) o->refcount--;  //非计数上限
     }
 }
 

@@ -72,6 +72,7 @@ static list *bio_jobs[BIO_NUM_OPS];
  * objects shared with the background thread. The main thread will just wait
  * that there are no longer jobs of this type to be executed before performing
  * the sensible operation. This data is also useful for reporting. */
+ //该全局数据可以给主线程用，判断当前没有后台线程处理
 static unsigned long long bio_pending[BIO_NUM_OPS];
 
 /* This structure represents a background Job. It is only used locally to this
@@ -135,13 +136,13 @@ void bioCreateBackgroundJob(int type, void *arg1, void *arg2, void *arg3) {
     job->arg1 = arg1;
     job->arg2 = arg2;
     job->arg3 = arg3;
-    pthread_mutex_lock(&bio_mutex[type]);
+    pthread_mutex_lock(&bio_mutex[type]);//加锁防止进来
     listAddNodeTail(bio_jobs[type],job);
-    bio_pending[type]++;
-    pthread_cond_signal(&bio_newjob_cond[type]);
+    bio_pending[type]++;//计数等待
+    pthread_cond_signal(&bio_newjob_cond[type]); //唤醒异步线程处理，任务队列
     pthread_mutex_unlock(&bio_mutex[type]);
 }
-
+//异步线程需要对任务队列进行轮训处理，依次从链表表头摘取元素逐个处理。摘取元素的时候也需要加锁，摘出来之后再解锁。如果一个元素的没有，它需要等待，直到主线程来唤醒它继续工作。
 void *bioProcessBackgroundJobs(void *arg) {
     struct bio_job *job;
     unsigned long type = (unsigned long) arg;
@@ -173,42 +174,45 @@ void *bioProcessBackgroundJobs(void *arg) {
 
         /* The loop always starts with the lock hold. */
         if (listLength(bio_jobs[type]) == 0) {
+			//队列为空，等待唤醒
             pthread_cond_wait(&bio_newjob_cond[type],&bio_mutex[type]);
             continue;
         }
         /* Pop the job from the queue. */
-        ln = listFirst(bio_jobs[type]);
+        ln = listFirst(bio_jobs[type]);//获取对头元素
         job = ln->value;
         /* It is now possible to unlock the background system as we know have
          * a stand alone job structure to process.*/
-        pthread_mutex_unlock(&bio_mutex[type]);
+        pthread_mutex_unlock(&bio_mutex[type]);//释放锁,为什么？？
 
         /* Process the job accordingly to its type. */
         if (type == BIO_CLOSE_FILE) {
             close((long)job->arg1);
         } else if (type == BIO_AOF_FSYNC) {
             redis_fsync((long)job->arg1);
-        } else if (type == BIO_LAZY_FREE) {
+        } else if (type == BIO_LAZY_FREE) { //懒删除
             /* What we free changes depending on what arguments are set:
              * arg1 -> free the object at pointer.
              * arg2 & arg3 -> free two dictionaries (a Redis DB).
              * only arg3 -> free the skiplist. */
-            if (job->arg1)
+            if (job->arg1)  // 释放一个普通对象，string/set/zset/hash等等，用于普通对象的异步删除
                 lazyfreeFreeObjectFromBioThread(job->arg1);
-            else if (job->arg2 && job->arg3)
+            else if (job->arg2 && job->arg3) // 释放全局redisDb对象的dict字典和expires字典，用于flushdb
                 lazyfreeFreeDatabaseFromBioThread(job->arg2,job->arg3);
-            else if (job->arg3)
+            else if (job->arg3)  // 释放Cluster的slots_to_keys对象 ,释放跳跃表
                 lazyfreeFreeSlotsMapFromBioThread(job->arg3);
         } else {
             serverPanic("Wrong job type in bioProcessBackgroundJobs().");
         }
-        zfree(job);
+        zfree(job);//释放任务对象
 
         /* Lock again before reiterating the loop, if there are no longer
          * jobs to process we'll block again in pthread_cond_wait(). */
+         // 再次加锁继续处理下一个元素
         pthread_mutex_lock(&bio_mutex[type]);
+		// 因为任务已经处理完了，可以放心从链表中删除节点了
         listDelNode(bio_jobs[type],ln);
-        bio_pending[type]--;
+        bio_pending[type]--; //处理完一个任务计数减1
 
         /* Unblock threads blocked on bioWaitStepOfType() if any. */
         pthread_cond_broadcast(&bio_step_cond[type]);

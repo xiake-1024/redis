@@ -212,7 +212,7 @@ void dbOverwrite(redisDb *db, robj *key, robj *val) {
     dictEntry *de = dictFind(db->dict,key->ptr);
 
     serverAssertWithInfo(NULL,key,de != NULL);
-    dictEntry auxentry = *de;
+     dictEntry auxentry = *de;
     robj *old = dictGetVal(de);
     if (server.maxmemory_policy & MAXMEMORY_FLAG_LFU) {
         val->lru = old->lru;    //redis中的内存策略 不懂这个？
@@ -220,11 +220,11 @@ void dbOverwrite(redisDb *db, robj *key, robj *val) {
     dictSetVal(db->dict, de, val);
 
     if (server.lazyfree_lazy_server_del) { //懒删除策略
-        freeObjAsync(old);
-        dictSetVal(db->dict, &auxentry, NULL);
+        freeObjAsync(old);  //将要删除的数据挂在到链表上，有专门的线程负责删除
+        dictSetVal(db->dict, &auxentry, NULL); //不理解为何要置空??
     }
 
-    dictFreeVal(db->dict, &auxentry);
+    dictFreeVal(db->dict, &auxentry); //不太理解 为何要清空??
 }
 
 /* High level Set operation. This function can be used in order to set

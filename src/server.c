@@ -2180,7 +2180,7 @@ void initServer(void) {
     scriptingInit(1);
     slowlogInit();
     latencyMonitorInit();
-    bioInit();
+    bioInit();//异步线程初始，比如执行懒删除
     server.initial_memory_usage = zmalloc_used_memory();
 }
 

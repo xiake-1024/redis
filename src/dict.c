@@ -430,6 +430,43 @@ static int _dictExpandIfNeeded(dict *ht){
 	return idx;
  }
 
+ /* Destroy an entire dictionary */
+int _dictClear(dict *d,dictht *ht,void(callback)(void *)){
+	unsigned long i;
+
+	/* Free all the elements */
+	//释放节点
+	for(i=0;i<ht->size&&ht->used >0;i++){
+		dictEntry *he,*nextHe;
+
+		if(callback&&(i&65535)==0) callback(d->privdata);//不太理解i&65535
+
+		if((he=ht->table[i])==NULL) continue;
+		while(he){
+			nextHe=he->next;
+			dictFreeVal(d, he);
+			dictFreeKey(d, he);
+			zfree(he);
+			zfree(he);
+			ht->used--;
+			he=nextHe;
+		}	
+	}
+	/* Free the table and the allocated cache structure */
+	zfree(ht->table);
+	/* Re-initialize the table */
+	_dictReset(ht);
+	return DICT_OK;  /* never fails */
+	
+}
+ /* Clear & Release the hash table */
+ //释放hash表
+ void dictRelease(dict *d){
+	_dictClear(d,&d->ht[0],NULL);
+	_dictClear(d,&d->ht[1],NULL);//不关心是否在rehash操作
+	zfree(d);
+ }
+
 
 /* ------------------------------- Debugging ---------------------------------*/
 /* ------------------------------- Benchmark ---------------------------------*/

@@ -610,14 +610,14 @@ typedef struct RedisModuleDigest {
 #define LRU_CLOCK_MAX ((1<<LRU_BITS)-1) /* Max value of obj->lru */
 #define LRU_CLOCK_RESOLUTION 1000 /* LRU clock resolution in ms */
 
-#define OBJ_SHARED_REFCOUNT INT_MAX
+#define OBJ_SHARED_REFCOUNT INT_MAX  //INT_MIN在标准头文件limits.h中定义。  2147483647 int是32位的
 typedef struct redisObject {
     unsigned type:4;
     unsigned encoding:4;
     unsigned lru:LRU_BITS; /* LRU time (relative to global lru_clock) or
                             * LFU data (least significant 8 bits frequency
                             * and most significant 16 bits access time). */
-    int refcount;
+    int refcount;//引用计数可以用来进行懒删除
     void *ptr;
 } robj;
 
