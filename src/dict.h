@@ -102,6 +102,7 @@ typedef struct dictIterator{
 #define DICT_HT_INITIAL_SIZE     4
 
 /* ------------------------------- Macros ------------------------------------*/
+#define dictFreeVal(d,entry) if((d)->type->valDestructor) (d)->type->valDestructor((d)->privdata,(entry)->v.val
 #define dictHashKey(d,key) (d)->type->hasFunction(key)
 #define dictIsRehashing(d) ((d)->rehashidx !=-1)
 #define dictGetVal(he) ((he)->v.val)

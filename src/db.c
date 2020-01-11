@@ -196,7 +196,9 @@ void dbAdd(redisDb *db, robj *key, robj *val) {
     serverAssertWithInfo(NULL,key,retval == DICT_OK);
     if (val->type == OBJ_LIST ||
         val->type == OBJ_ZSET)
+		//val是list对象，将key从bloking_keysh转移到ready_keys字典中  不理解??
         signalKeyAsReady(db, key);
+	 //集群模式下，将key-slot信息记录到slots_to_keys 不理解??
     if (server.cluster_enabled) slotToKeyAdd(key);
 }
 
@@ -205,6 +207,7 @@ void dbAdd(redisDb *db, robj *key, robj *val) {
  * This function does not modify the expire time of the existing key.
  *
  * The program is aborted if the key was not already present. */
+ //修改数据库中key的val
 void dbOverwrite(redisDb *db, robj *key, robj *val) {
     dictEntry *de = dictFind(db->dict,key->ptr);
 
@@ -212,11 +215,11 @@ void dbOverwrite(redisDb *db, robj *key, robj *val) {
     dictEntry auxentry = *de;
     robj *old = dictGetVal(de);
     if (server.maxmemory_policy & MAXMEMORY_FLAG_LFU) {
-        val->lru = old->lru;
+        val->lru = old->lru;    //redis中的内存策略 不懂这个？
     }
     dictSetVal(db->dict, de, val);
 
-    if (server.lazyfree_lazy_server_del) {
+    if (server.lazyfree_lazy_server_del) { //懒删除策略
         freeObjAsync(old);
         dictSetVal(db->dict, &auxentry, NULL);
     }
