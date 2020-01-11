@@ -100,7 +100,7 @@ void bioInit(void) {
     size_t stacksize;
     int j;
 
-    /* Initialization of state vars and objects */
+    /* Initialization of state vars and objects *///初始化线程,条件变量
     for (j = 0; j < BIO_NUM_OPS; j++) {
         pthread_mutex_init(&bio_mutex[j],NULL);
         pthread_cond_init(&bio_newjob_cond[j],NULL);
@@ -120,7 +120,8 @@ void bioInit(void) {
      * function accepts in order to pass the job ID the thread is
      * responsible of. */
     for (j = 0; j < BIO_NUM_OPS; j++) {
-        void *arg = (void*)(unsigned long) j;
+        void *arg = (void*)(unsigned long) j; //为什么要将数字强制转换为指针类型???
+		//只需要给线程初始化函数传递线程类型即可
         if (pthread_create(&thread,&attr,bioProcessBackgroundJobs,arg) != 0) {
             serverLog(LL_WARNING,"Fatal: Can't initialize Background Jobs.");
             exit(1);
