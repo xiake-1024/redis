@@ -59,7 +59,9 @@ int dbAsyncDelete(redisDb *db, robj *key) {
     /* If the value is composed of a few allocations, to free in a lazy way
      * is actually just slower... So under a certain limit we just free
      * the object synchronously. */
+     // 删除该键在过期表中对应的entry
     dictEntry *de = dictUnlink(db->dict,key->ptr);
+	// 如果该键值占用空间非常小，懒删除反而效率低。所以只有在一定条件下，才会异步删除
     if (de) {
         robj *val = dictGetVal(de);
         size_t free_effort = lazyfreeGetFreeEffort(val);
@@ -72,8 +74,9 @@ int dbAsyncDelete(redisDb *db, robj *key) {
          * objects, and then call dbDelete(). In this case we'll fall
          * through and reach the dictFreeUnlinkedEntry() call, that will be
          * equivalent to just calling decrRefCount(). */
+          // 如果释放这个对象消耗很多，并且值未被共享(refcount == 1)则将其加入到懒删除列表
         if (free_effort > LAZYFREE_THRESHOLD && val->refcount == 1) {
-            atomicIncr(lazyfree_objects,1);
+            atomicIncr(lazyfree_objects,1);//标记被删除的共享变量，加锁，多线程处理
             bioCreateBackgroundJob(BIO_LAZY_FREE,val,NULL,NULL);
             dictSetVal(db->dict,de,NULL);
         }
@@ -81,9 +84,10 @@ int dbAsyncDelete(redisDb *db, robj *key) {
 
     /* Release the key-val pair, or just the key if we set the val
      * field to NULL in order to lazy free it later. */
+      // 释放键值对，或者只释放key，而将val设置为NULL来后续懒删除
     if (de) {
-        dictFreeUnlinkedEntry(db->dict,de);
-        if (server.cluster_enabled) slotToKeyDel(key);
+        dictFreeUnlinkedEntry(db->dict,de);//清空节点内存
+        if (server.cluster_enabled) slotToKeyDel(key); // slot 和 key 的映射关系是用于快速定位某个key在哪个 slot中。
         return 1;
     } else {
         return 0;

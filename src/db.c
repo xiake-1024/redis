@@ -293,9 +293,9 @@ robj *dbRandomKey(redisDb *db) {
 int dbSyncDelete(redisDb *db, robj *key) {
     /* Deleting an entry from the expires dict will not free the sds of
      * the key, because it is shared with the main dictionary. */
-    if (dictSize(db->expires) > 0) dictDelete(db->expires,key->ptr);
+    if (dictSize(db->expires) > 0) dictDelete(db->expires,key->ptr);//过期字典中删除
     if (dictDelete(db->dict,key->ptr) == DICT_OK) {
-        if (server.cluster_enabled) slotToKeyDel(key);
+        if (server.cluster_enabled) slotToKeyDel(key); //通知集群其他槽删除
         return 1;
     } else {
         return 0;
@@ -1132,16 +1132,20 @@ long long getExpire(redisDb *db, robj *key) {
  * AOF and the master->slave link guarantee operation ordering, everything
  * will be consistent even if we allow write operations against expiring
  * keys. */
+ // 将命令传递到slave和AOF缓冲区。maser删除一个过期键时会发送Del命令到所有的slave和AOF缓冲区
 void propagateExpire(redisDb *db, robj *key, int lazy) {
     robj *argv[2];
 
+	// 生成同步的数据
     argv[0] = lazy ? shared.unlink : shared.del;
     argv[1] = key;
     incrRefCount(argv[0]);
     incrRefCount(argv[1]);
 
+	// 如果开启了 AOF 则追加到 AOF 缓冲区中
     if (server.aof_state != AOF_OFF)
         feedAppendOnlyFile(server.delCommand,db->id,argv,2);
+	// 同步到所有 slave
     replicationFeedSlaves(server.slaves,db->id,argv,2);
 
     decrRefCount(argv[0]);
@@ -1159,6 +1163,7 @@ int keyIsExpired(redisDb *db, robj *key) {
     if (when < 0) return 0; /* No expire for this key */
 
     /* Don't expire anything while loading. It will be done later. */
+	 // 实例正在从硬盘 laod 数据，比如说 RDB 或者 AOF
     if (server.loading) return 0;
 
     /* If we are in the context of a Lua script, we pretend that time is

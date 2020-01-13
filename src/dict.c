@@ -374,8 +374,93 @@ void *dictFetchValue(dict * d, const void * key){
 	he=dictFind(d,key);  //返回值赋值给节点
 	return he?dictGetVal(he):NULL;
 }
+/* Remove an element from the table, but without actually releasing
+ * the key, value and dictionary entry. The dictionary entry is returned
+ * if the element was found (and unlinked from the table), and the user
+ * should later call `dictFreeUnlinkedEntry()` with it in order to release it.
+ * Otherwise if the key is not found, NULL is returned.
+ *
+ * This function is useful when we want to remove something from the hash
+ * table but want to use its value before actually deleting the entry.
+ * Without this function the pattern would require two lookups:
+ *
+ *  entry = dictFind(...);
+ *  // Do something with entry
+ *  dictDelete(dictionary,entry);
+ *
+ * Thanks to this function it is possible to avoid this, and use
+ * instead:
+ *
+ * entry = dictUnlink(dictionary,entry);
+ * // Do something with entry
+ * dictFreeUnlinkedEntry(entry); // <- This does not need to lookup again.
+ */
+ dictEntry *dictUnlink(dict *ht,const void *key){
+	return dictGenericDelete(ht,key,1);
+ }
+ /* Remove an element, returning DICT_OK on success or DICT_ERR if the
+ * element was not found. */
+ int dictDelete(dict *ht, const void * key){
+	return dictGenericDelete(ht,key,0)	?DICT_OK:DICT_ERR;
+ }
+ /* You need to call this function to really free the entry after a call
+ * to dictUnlink(). It's safe to call this function with 'he' = NULL. */
+ void dictFreeUnlinkedEntry(dict *d,dictEntry *he){
+	if(he==NULL) return;
+	dictFreeKey(d, key);
+	dictFreeVal(d, key);
+	zfree(he);
+ }
 
 /* ------------------------- private functions ------------------------------ */
+ /* Search and remove an element. This is an helper function for
+ * dictDelete() and dictUnlink(), please check the top comment
+ * of those functions. */
+ //刪除是否释放空间，有上层决定
+static dictEntry *dictGenericDelete(dict *d,const void *key,int nofreee){
+	unit64_t h,idx;
+	dictEntry *he,*prevHe;
+	int table;
+
+	if(d->ht[0]==0&&d->ht[1].used==0) return NULL; //沒有可以刪除的
+
+	if(dictIsRehashing(d)) _dictRehashStep(d); //先rehash
+	d=dictHashKey(d, key);
+
+	for(table=0;table<=1;table++){
+		idx=h&d->ht[table].sizemask;
+		he=d->ht[table].table[idx];
+		prevHe=NULL;
+		while(he){
+			if(key==he->key||dictCompareKeys(d, key,, he->key)){
+				/* Unlink the element from the list */
+				//先解除连接
+				if(prevHe)
+					prevHe->next=he->next;
+				else
+					d->ht[table].table[idx]=he->next;
+
+				if(!nofreee){
+					dictFreeKey(d, he);
+					dictFreeVal(d, he);
+					zfree(he);
+				}
+				d->ht[table].used--;
+				return he;
+				
+			}
+			prevHe=he;
+			he=he->next;
+		}
+		if(!dictIsRehashing(d)) break;
+	}
+
+	return NULL;
+	
+	
+}
+
+ 
 /* Expand the hash table if needed */
 static int _dictExpandIfNeeded(dict *ht){
 	/* Incremental rehashing already in progress. Return. */
@@ -391,7 +476,7 @@ static int _dictExpandIfNeeded(dict *ht){
 		* the number of buckets. */
 	if(d->ht[0].used>=d->ht[0].size
 		&&(dict_can_resize||d->ht[0].used/d->ht[0].size>dict_force_resize_ratio)){
-		return dictExpand(d,d->ht[0].used*2);
+		return dictExpand(d},d->ht[0].used*2);
 	}
 	return DICT_OK;		
 }

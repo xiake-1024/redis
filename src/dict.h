@@ -100,6 +100,7 @@ typedef struct dictIterator{
 /* This is the initial size of every hash table */
 //hash表的初始大小
 #define DICT_HT_INITIAL_SIZE     4
+#define dictSize(d) ((d)->ht[0].used+(d)->ht[1].used)
 
 /* ------------------------------- Macros ------------------------------------*/
 #define dictFreeVal(d,entry) if((d)->type->valDestructor) (d)->type->valDestructor((d)->privdata,(entry)->v.val
@@ -118,6 +119,10 @@ typedef struct dictIterator{
 int dictRehash(dict *d,int n);
 void *dictFetchValue(dict *d,const void *key);
 int dictAdd(dict *d,void *key,void *val);
+dictEntry *dictUnlink(dict *ht,const void *key);
+int dictDelete(dict *d,const void *key);
+void dictFreeUnlinkedEntry(dict *d,dictEntry *he);
+
 
 #endif
 
