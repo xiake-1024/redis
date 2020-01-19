@@ -1007,12 +1007,26 @@ size_t rdbSavedObjectLen(robj *o) {
  * On error -1 is returned.
  * On success if the key was actually saved 1 is returned, otherwise 0
  * is returned (the key was already expired). */
+ */
+ /*
+REDIS // RDB协议约束的固定字符串
+0006 // redis的版本号
+FE 00 // 表示当前接下来的key都是db=0中的key；
+FC 1506327609 // 表示key失效时间点为1506327609
+0 // 表示key的属性是string类型；
+username // key
+afei // value
+FF // 表示遍历完成
+y73e9iq1 // checksum值
+*/
 int rdbSaveKeyValuePair(rio *rdb, robj *key, robj *val, long long expiretime) {
     int savelru = server.maxmemory_policy & MAXMEMORY_FLAG_LRU;
     int savelfu = server.maxmemory_policy & MAXMEMORY_FLAG_LFU;
 
     /* Save the expire time */
     if (expiretime != -1) {
+		 // 如果过期时间少于当前时间，那么表示该key已经失效，返回不做任何保存；
+		  // 如果当前遍历的entry有失效时间属性，那么保存REDIS_RDB_OPCODE_EXPIRETIME_MS即252，即"FC"以及失效时间到rdb文件中，
         if (rdbSaveType(rdb,RDB_OPCODE_EXPIRETIME_MS) == -1) return -1;
         if (rdbSaveMillisecondTime(rdb,expiretime) == -1) return -1;
     }
@@ -1037,6 +1051,7 @@ int rdbSaveKeyValuePair(rio *rdb, robj *key, robj *val, long long expiretime) {
         if (rdbWriteRaw(rdb,buf,1) == -1) return -1;
     }
 
+	// 接下来保存redis key的类型，key，以及value到rdb文件中；
     /* Save type, key, value */
     if (rdbSaveObjectType(rdb,val) == -1) return -1;
     if (rdbSaveStringObject(rdb,key) == -1) return -1;
@@ -1140,6 +1155,7 @@ ssize_t rdbSaveSingleModuleAux(rio *rdb, int when, moduleType *mt) {
  * When the function returns C_ERR and if 'error' is not NULL, the
  * integer pointed by 'error' is set to the value of errno just after the I/O
  * error. */
+ //根据RDB文件协议将所有redis中的key-value写入rdb文件中:
 int rdbSaveRio(rio *rdb, int *error, int flags, rdbSaveInfo *rsi) {
     dictIterator *di = NULL;
     dictEntry *de;
@@ -1150,18 +1166,22 @@ int rdbSaveRio(rio *rdb, int *error, int flags, rdbSaveInfo *rsi) {
 
     if (server.rdb_checksum)
         rdb->update_cksum = rioGenericUpdateChecksum;
+	// rdb文件中最先写入的内容就是magic，magic就是REDIS这个字符串+4位版本号
     snprintf(magic,sizeof(magic),"REDIS%04d",RDB_VERSION);
     if (rdbWriteRaw(rdb,magic,9) == -1) goto werr;
     if (rdbSaveInfoAuxFields(rdb,flags,rsi) == -1) goto werr;
     if (rdbSaveModulesAux(rdb, REDISMODULE_AUX_BEFORE_RDB) == -1) goto werr;
 
+	// 遍历所有db重写rdb文件；
     for (j = 0; j < server.dbnum; j++) {
         redisDb *db = server.db+j;
         dict *d = db->dict;
+	// 如果db的size为0，即没有任何key，那么跳过，遍历下一个db；
         if (dictSize(d) == 0) continue;
         di = dictGetSafeIterator(d);
 
         /* Write the SELECT DB opcode */
+		// 写入REDIS_RD  B_OPCODE_SELECTDB，这个值redis定义为254，即FE，再通过rdbSaveLen合入当前dbnum，例如当前db为0，那么写入FE 00
         if (rdbSaveType(rdb,RDB_OPCODE_SELECTDB) == -1) goto werr;
         if (rdbSaveLen(rdb,j) == -1) goto werr;
 
@@ -1178,12 +1198,15 @@ int rdbSaveRio(rio *rdb, int *error, int flags, rdbSaveInfo *rsi) {
 
         /* Iterate this DB writing every entry */
         while((de = dictNext(di)) != NULL) {
+			// 先得到当前entry的key(sds类型)和value（redisObject类型）；
             sds keystr = dictGetKey(de);
             robj key, *o = dictGetVal(de);
             long long expire;
 
             initStaticStringObject(key,keystr);
+			 // 从redisDb的expire这个dict中查询过期时间属性值；
             expire = getExpire(db,&key);
+			 // 每个entry（redis中的key和其value）rdb持久化的核心代码
             if (rdbSaveKeyValuePair(rdb,&key,o,expire) == -1) goto werr;
 
             /* When this RDB is produced as part of an AOF rewrite, move
@@ -1217,8 +1240,11 @@ int rdbSaveRio(rio *rdb, int *error, int flags, rdbSaveInfo *rsi) {
 
     if (rdbSaveModulesAux(rdb, REDISMODULE_AUX_AFTER_RDB) == -1) goto werr;
 
+	// 遍历所有db后，写入EOF这个opcode，REDIS_RDB_OPCODE_EOF申明为255，即FF，所以是写入FF到rdb文件中；FF是redis对rdb文件结束的定义；
     /* EOF opcode */
     if (rdbSaveType(rdb,RDB_OPCODE_EOF) == -1) goto werr;
+
+	// 最后写入8个字节长度的checksum值到rdb文件尾部；
 
     /* CRC64 checksum. It will be zero if checksum computation is disabled, the
      * loading code skips the check in this case. */
@@ -1260,12 +1286,14 @@ werr: /* Write error. */
 }
 
 /* Save the DB on disk. Return C_ERR on error, C_OK on success. */
+//数据落地
 int rdbSave(char *filename, rdbSaveInfo *rsi) {
     char tmpfile[256];
     char cwd[MAXPATHLEN]; /* Current working dir path for error messages. */
     FILE *fp;
     rio rdb;
     int error = 0;
+	// 文件临时文件名为temp-${pid}.rdb
 
     snprintf(tmpfile,256,"temp-%d.rdb", (int) getpid());
     fp = fopen(tmpfile,"w");
@@ -1285,6 +1313,7 @@ int rdbSave(char *filename, rdbSaveInfo *rsi) {
     if (server.rdb_save_incremental_fsync)
         rioSetAutoSync(&rdb,REDIS_AUTOSYNC_BYTES);
 
+	// RDB持久化的核心实现；
     if (rdbSaveRio(&rdb,&error,RDB_SAVE_NONE,rsi) == C_ERR) {
         errno = error;
         goto werr;
@@ -1297,6 +1326,8 @@ int rdbSave(char *filename, rdbSaveInfo *rsi) {
 
     /* Use RENAME to make sure the DB file is changed atomically only
      * if the generate DB file is ok. */
+     
+    // 重命名rdb文件的命名；
     if (rename(tmpfile,filename) == -1) {
         char *cwdp = getcwd(cwd,MAXPATHLEN);
         serverLog(LL_WARNING,
@@ -1333,18 +1364,21 @@ int rdbSaveBackground(char *filename, rdbSaveInfo *rsi) {
     server.lastbgsave_try = time(NULL);
     openChildInfoPipe();
 
-    start = ustime();
-    if ((childpid = fork()) == 0) {
+    start = ustime();//记录rdb持久化开始时间
+    if ((childpid = fork()) == 0) { //fork子进程
+     // 如果fork()的结果childpid为0，即当前进程为fork的子进程，那么接下来调用rdbSave()进程持久化；
         int retval;
 
         /* Child */
         closeListeningSockets(0);
         redisSetProcTitle("redis-rdb-bgsave");
+		 // bgsave事实上就是通过fork的子进程调用rdbSave()实现, rdbSave()就是save命令业务实现
         retval = rdbSave(filename,rsi);
         if (retval == C_OK) {
             size_t private_dirty = zmalloc_get_private_dirty(-1);
 
             if (private_dirty) {
+				 // RDB持久化成功后，如果是notice级别的日志，那么log输出RDB过程中copy-on-write使用的内存
                 serverLog(LL_NOTICE,
                     "RDB: %zu MB of memory used by copy-on-write",
                     private_dirty/(1024*1024));
@@ -1354,11 +1388,14 @@ int rdbSaveBackground(char *filename, rdbSaveInfo *rsi) {
             sendChildInfo(CHILD_INFO_TYPE_RDB);
         }
         exitFromChild((retval == C_OK) ? 0 : 1);
-    } else {
+    } else {//父进程
+    // 父进程更新redisServer记录一些信息，例如：fork进程消耗的时间stat_fork_time, 
         /* Parent */
         server.stat_fork_time = ustime()-start;
+	 // 更新redisServer记录fork速率：每秒多少G；zmalloc_used_memory()的单位是字节，所以通过除以(1024*1024*1024),得到GB；由于记录的fork_time即fork时间是微妙，所以*1000000，得到每秒钟fork多少GB的速度
         server.stat_fork_rate = (double) zmalloc_used_memory() * 1000000 / server.stat_fork_time / (1024*1024*1024); /* GB per second. */
         latencyAddSampleIfNeeded("fork",server.stat_fork_time/1000);
+		  // 如果fork子进程出错，即childpid为-1，更新redisServer，记录最后一次bgsave状态是REDIS_ERR;
         if (childpid == -1) {
             closeChildInfoPipe();
             server.lastbgsave_status = C_ERR;
@@ -1367,6 +1404,7 @@ int rdbSaveBackground(char *filename, rdbSaveInfo *rsi) {
             return C_ERR;
         }
         serverLog(LL_NOTICE,"Background saving started by pid %d",childpid);
+		 // 最后在redisServer中记录的save开始时间重置为空，并记录执行bgsave的子进程id，即child_pid；
         server.rdb_save_time_start = time(NULL);
         server.rdb_child_pid = childpid;
         server.rdb_child_type = RDB_CHILD_TYPE_DISK;
@@ -2453,7 +2491,7 @@ int rdbSaveToSlavesSockets(rdbSaveInfo *rsi) {
 }
 
 void saveCommand(client *c) {
-    if (server.rdb_child_pid != -1) {
+    if (server.rdb_child_pid != -1) { //没有异步保存持久化进程
         addReplyError(c,"Background save already in progress");
         return;
     }

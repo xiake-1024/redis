@@ -81,7 +81,7 @@ typedef struct dict{
 	dictht ht[2];
 	long rehashidx;/* rehashing not in progress if rehashidx == -1 */
 	unsigned long iterators;/* number of iterators currently running */	
-}
+};
 /* If safe is set to 1 this is a safe iterator, that means, you can call
  * dictAdd, dictFind, and other functions against the dictionary even while
  * iterating. Otherwise it is a non safe iterator, and only dictNext()
@@ -108,6 +108,7 @@ typedef struct dictIterator{
 #define dictHashKey(d,key) (d)->type->hasFunction(key)
 #define dictIsRehashing(d) ((d)->rehashidx !=-1)
 #define dictGetVal(he) ((he)->v.val)
+#define dictGetKey(he) ((he)->v.key)
 #define dictCompareKeys(d,key1,key2) (((d)->type->keyCompare)?(d)->type->keyCompare((d)->privdata,key1,key2):(key1)==(key2))
 //如果支持valDup，则使用将privdata和val作为参数生成val，否则直接使用val
 #define dictSetVal(d,entry,_val_) do { if((d)->type->valDup) (entry)->v.val=(d)->type->valDup((d)->privdata,_val_); else (entry)->v.val=(_val_); }while(0)
