@@ -290,7 +290,7 @@ void expireSlaveKeys(void) {
     int cycles = 0, noexpire = 0;
     mstime_t start = mstime();
     while(1) {
-        dictEntry *de = dictGetRandomKey(slaveKeysWithExpire);
+        dictEntry *de = dictGetR                                                                                                                                                                                                                                                                                                                                                                                                                                                                        andomKey(slaveKeysWithExpire);
         sds keyname = dictGetKey(de);
         uint64_t dbids = dictGetUnsignedIntegerVal(de);
         uint64_t new_dbids = 0;
@@ -310,7 +310,7 @@ void expireSlaveKeys(void) {
                     expired = 1;
                 }
 
-                /* If the key was not expired in this DB, we need to set the
+                /* If the key was not expired in this DB, we need to set the  
                  * corresponding bit in the new bitmap we set as value.
                  * At the end of the loop if the bitmap is zero, it means we
                  * no longer need to keep track of this key. */

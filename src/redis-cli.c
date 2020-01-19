@@ -4599,7 +4599,7 @@ static int clusterManagerCommandCreate(int argc, char **argv) {
             return 0;
         }
         char *err = NULL;
-        if (!clusterManagerNodeIsCluster(node, &err)) {
+        if (!clusterManagerNodeIsCluster(node, &err)) { //判断当前节点是否是集群节点
             clusterManagerPrintNotClusterNodeError(node, err);
             if (err) zfree(err);
             freeClusterManagerNode(node);
@@ -6655,8 +6655,9 @@ static void findHotKeys(void) {
 /* Return the specified INFO field from the INFO command output "info".
  * A new buffer is allocated for the result, that needs to be free'd.
  * If the field is not found NULL is returned. */
+ //从协议字符串中寻找指定字符串
 static char *getInfoField(char *info, char *field) {
-    char *p = strstr(info,field);
+    char *p = strstr(info,field);//确定field是否为info的子串,并返回从field开始到info结束的字符串
     char *n1, *n2;
     char *result;
 
