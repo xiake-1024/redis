@@ -35,6 +35,11 @@
 #include <stdio.h>
 #include <stdint.h>
 #include "sds.h"
+/*  struct rio中声明了统一的io操作接口，并且包含一个底层io对象的union结构。
+使用不同的底层io初始化rio实例后，调用rio的抽象接口即会调用对应底层io的实现。
+以面向对象的思想即是，rio为抽象类，它拥有三个子类:buffer、file及fdset，这三
+个子类实现了抽象类声明的接口。使用者可以使用它们的父类rio进行编程，实现多态性。
+*/
 
 struct _rio {
     /* Backend functions.
@@ -63,23 +68,44 @@ struct _rio {
     /* Backend-specific vars. */
     union {
         /* In-memory buffer target. */
+	/* 以buffer为底层io的rio实例，
+	write操作将参数buf中的数据copy到一个sds中(redis的字符串实现)。
+	反之，它的read操作将会从一个sds中读取数据到参数buf指向的地址中。
+  抽象接口不支持seek操作，因此写操作仅能append，而读操作也只能从当前位置读数据。
+  */
         struct {
             sds ptr;
-            off_t pos;
+            off_t pos;//记录读写操作在buff中的当前位置
         } buffer;
         /* Stdio file pointer target. */
+		/*
+		以file为底层io的rio实例，write操作将参数buf中的数据写入到文件中，
+		而read操作则将file中的数据读到参数buf指向的内存地址中。
+		file对象的抽象接口实现只需要简单的调用c语言的库函数即可。
+		同样由于抽象接口未声明seek操作，它的具体实现也没有实现seek操作
+		这里的buffered记录了写操作的累计数据量，而autosync为设置一个同步值，
+		当buffered值超过autosync值后，会执行sync操作使数据同步到磁盘上，
+		sync操作后将buffered值清零。
+		*/
         struct {
             FILE *fp;
             off_t buffered; /* Bytes written since last fsync. */
             off_t autosync; /* fsync after 'autosync' bytes written. */
         } file;
         /* Multiple FDs target (used to write to N sockets). */
+		/*
+		fdset的write操作可以将一份数据向多个socket发送。对fdset的抽象大大地简化了
+		redis的master向它的多个slave发送同步数据的 io操作fdset不支持read操作
+		。此外，它使用了类似buffer的一个sds实例作为缓存，数据首先被写入到该缓存中，
+		当缓存中的数据超过一定数量，或者调用了flush操作，再将缓存中的数据发送到所有
+		的socket中
+		*/
         struct {
-            int *fds;       /* File descriptors. */
-            int *state;     /* Error state of each fd. 0 (if ok) or errno. */
-            int numfds;
-            off_t pos;
-            sds buf;
+            int *fds;       /* File descriptors. 所有的目标socket的文件描述符集合*/
+            int *state;     /* Error state of each fd. 0 (if ok) or errno.state记录了这些文件描述符的状态(是否发生写错误) */
+            int numfds;		/*numfds记录了集合的大小，*/
+            off_t pos;		/*pos代表buf中下一个应该发送的数据的位置*/
+            sds buf;		/*buf为缓存*/
         } fdset;
     } io;
 };
@@ -124,6 +150,14 @@ static inline int rioFlush(rio *r) {
     return r->flush(r);
 }
 
+/* 每一个底层对象都需要实现它需要支持的接口，实例化rio时，
+rio结构中的函数指针将指向底io的实现。Redis是C语言实现，
+因此针对 三个底层io声明了三个对应的初始化函数：
+这三个函数将初始化rio实例中的函数指针为它对应的抽象接口实现，
+并初始化union结构指向正确的底层io对象。
+
+
+*/
 void rioInitWithFile(rio *r, FILE *fp);
 void rioInitWithBuffer(rio *r, sds s);
 void rioInitWithFdset(rio *r, int *fds, int numfds);

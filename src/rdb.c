@@ -78,6 +78,7 @@ static int rdbWriteRaw(rio *rdb, void *p, size_t len) {
 /* This is just a wrapper for the low level function rioRead() that will
  * automatically abort if it is not possible to read the specified amount
  * of bytes. */
+//此底层函数为rioRead的封装，如果不能读取到指定字节的数据，将会自动终止 
 void rdbLoadRaw(rio *rdb, void *buf, uint64_t len) {
     if (rioRead(rdb,buf,len) == 0) {
         rdbExitReportCorruptRDB(
@@ -137,6 +138,7 @@ long long rdbLoadMillisecondTime(rio *rdb, int rdbver) {
 /* Saves an encoded length. The first two bits in the first byte are used to
  * hold the encoding type. See the RDB_* definitions for more information
  * on the types of encoding. */
+ //该函数完成长度的编码 开始两位用于区分编码类型。
 int rdbSaveLen(rio *rdb, uint64_t len) {
     unsigned char buf[2];
     size_t nwritten;
@@ -180,6 +182,7 @@ int rdbSaveLen(rio *rdb, uint64_t len) {
  * encodings.
  *
  * The function returns -1 on error, 0 on success. */
+ //完成长度值的解码
 int rdbLoadLenByRef(rio *rdb, int *isencoded, uint64_t *lenptr) {
     unsigned char buf[2];
     int type;
@@ -219,7 +222,7 @@ int rdbLoadLenByRef(rio *rdb, int *isencoded, uint64_t *lenptr) {
 /* This is like rdbLoadLenByRef() but directly returns the value read
  * from the RDB stream, signaling an error by returning RDB_LENERR
  * (since it is a too large count to be applicable in any Redis data
- * structure). */
+ * structure).    */
 uint64_t rdbLoadLen(rio *rdb, int *isencoded) {
     uint64_t len;
 
