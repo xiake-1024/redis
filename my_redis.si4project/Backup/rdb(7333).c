@@ -1300,7 +1300,7 @@ int rdbSave(char *filename, rdbSaveInfo *rsi) {
 
     snprintf(tmpfile,256,"temp-%d.rdb", (int) getpid());
     fp = fopen(tmpfile,"w");
-    if (!fp) {//打开文件失败记录
+    if (!fp) {
         char *cwdp = getcwd(cwd,MAXPATHLEN);
         serverLog(LL_WARNING,
             "Failed opening the RDB file %s (in server root dir %s) "
@@ -1311,7 +1311,6 @@ int rdbSave(char *filename, rdbSaveInfo *rsi) {
         return C_ERR;
     }
 
-	//抽象io接口，实例化写文件部分 数据结构 如文件句柄 buffer autosync 
     rioInitWithFile(&rdb,fp);
 
     if (server.rdb_save_incremental_fsync)
@@ -1325,7 +1324,6 @@ int rdbSave(char *filename, rdbSaveInfo *rsi) {
 
     /* Make sure data will not remain on the OS's output buffers */
     if (fflush(fp) == EOF) goto werr;
-	//同步文件到磁盘
     if (fsync(fileno(fp)) == -1) goto werr;
     if (fclose(fp) == EOF) goto werr;
 

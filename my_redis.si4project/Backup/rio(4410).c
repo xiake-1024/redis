@@ -149,12 +149,12 @@ static const rio rioFileIO = {
     0,              /* read/write chunk size */
     { { NULL, 0 } } /* union for io-specific vars */
 };
-//写文件
+
 void rioInitWithFile(rio *r, FILE *fp) {
     *r = rioFileIO;
-    r->io.file.fp = fp;//文件句柄
-    r->io.file.buffered = 0;//写数据buffer
-    r->io.file.autosync = 0;//同步到磁盘buffer标准
+    r->io.file.fp = fp;
+    r->io.file.buffered = 0;
+    r->io.file.autosync = 0;
 }
 
 /* ------------------- File descriptors set implementation ------------------- */
