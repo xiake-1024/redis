@@ -1334,8 +1334,6 @@ int rdbSave(char *filename, rdbSaveInfo *rsi) {
      
     // 重命名rdb文件的命名；
     if (rename(tmpfile,filename) == -1) {
-		//getcwd()会将当前工作目录的绝对路径复制到参数
-		//buffer所指的内存空间中,参数maxlen为buffer的空间大小。
         char *cwdp = getcwd(cwd,MAXPATHLEN);
         serverLog(LL_WARNING,
             "Error moving temp DB file %s on the final "
@@ -1344,16 +1342,11 @@ int rdbSave(char *filename, rdbSaveInfo *rsi) {
             filename,
             cwdp ? cwdp : "unknown",
             strerror(errno));
-		//执行unlink()函数并不一定会真正的删除文件，它先会检查文件系统中此文件的连接数是否为1，如果不是1说明此文件还有其他链接对象，因此只对此文件的连接数进行减1操作。
-		//若连接数为1，并且在此时没有任何进程打开该文件，此内容才会真正地被删除掉。
-		//在有进程打开此文件的情况下，则暂时不会删除，直到所有打开该文件的进程都结束时文件就会被删除。
         unlink(tmpfile);
         return C_ERR;
     }
 
     serverLog(LL_NOTICE,"DB saved on disk");
-	//更新dirty计数器和lastsave
-	//TODO 不太清楚使用?
     server.dirty = 0;
     server.lastsave = time(NULL);
     server.lastbgsave_status = C_OK;

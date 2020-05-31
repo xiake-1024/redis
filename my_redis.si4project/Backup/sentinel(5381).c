@@ -18,7 +18,7 @@
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
  * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE`
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
  * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
  * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
  * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
@@ -162,19 +162,10 @@ typedef struct instanceLink {
 } instanceLink;
 
 typedef struct sentinelRedisInstance {
-	//主服务器:SRI_MASTER
-	//从服务器:SRI_SLVAE
-    int flags;      /* See SRI_... defines *///标识值，记录了实例的类型，以及该实例的当前状态
-    //实例的名字
-    //主服务器的名字由用户在配置文件中设置
-    //从服务器以及sentinel的名字由sentinel自动设置
-    //格式为 ip:port 例如 "127.0.0.1:26379"
+    int flags;      /* See SRI_... defines */
     char *name;     /* Master name from the point of view of this sentinel. */
-	//实例的运行id
     char *runid;    /* Run ID of this instance, or unique ID if is a Sentinel.*/
-	//配置纪元，用于实现故障转移
     uint64_t config_epoch;  /* Configuration epoch. */
-	//实例的地址
     sentinelAddr *addr; /* Master host. */
     instanceLink *link; /* Link to the instance, may be shared for Sentinels. */
     mstime_t last_pub_time;   /* Last time we sent hello via Pub/Sub. */
@@ -185,7 +176,6 @@ typedef struct sentinelRedisInstance {
                                              SENTINEL is-master-down command. */
     mstime_t s_down_since_time; /* Subjectively down since time. */
     mstime_t o_down_since_time; /* Objectively down since time. */
-	//实例无响应多少毫秒之后才会被判断为主观下线
     mstime_t down_after_period; /* Consider it down after that period. */
     mstime_t info_refresh;  /* Time at which we received INFO output from it. */
     dict *renamed_commands;     /* Commands renamed in this instance:
@@ -204,15 +194,8 @@ typedef struct sentinelRedisInstance {
 
     /* Master specific. */
     dict *sentinels;    /* Other sentinels monitoring the same master. */
-	//记录主服务器属下从服务器的名单
-	//键:字典的键是由Sentinel自动设置的从服务器的名字，格式为ip:port 
-	//值:从服务器对应的实例结构
     dict *slaves;       /* Slaves for this master instance. */
-	//SENTINEL monitor <master-name> <IP> <port> <quorum> 选项中的quorum参数
-	//判断这个实例为客观下线所需要的支持投票数量
     unsigned int quorum;/* Number of sentinels that need to agree on failure. */
-	//SENTINEL parallel-syncs <master-name> <number>  选项的值
-	//在执行故障转移操作时候，可以同时对新的主服务器进行同步的从服务器的数量
     int parallel_syncs; /* How many slaves to reconfigure at same time. */
     char *auth_pass;    /* Password to use for AUTH against master & slaves. */
 
@@ -235,8 +218,6 @@ typedef struct sentinelRedisInstance {
     int failover_state; /* See SENTINEL_FAILOVER_STATE_* defines. */
     mstime_t failover_state_change_time;
     mstime_t failover_start_time;   /* Last failover attempt start time. */
-	//SENTINEL failover-timeout <master-name> <ms>选项的值
-	//刷新故障迁移状态的最大时限
     mstime_t failover_timeout;      /* Max time to refresh failover state. */
     mstime_t failover_delay_logged; /* For what failover_start_time value we
                                        logged the failover delay. */
@@ -251,15 +232,15 @@ typedef struct sentinelRedisInstance {
 /* Main state. */
 struct sentinelState {
     char myid[CONFIG_RUN_ID_SIZE+1]; /* This sentinel ID. */
-    uint64_t current_epoch;         /* Current epoch. *///当前纪元，用于实现故障转移
-    dict *masters;      /* Dictionary of master sentinelRedisInstances. 保存了所有被这个sentiel
-                           Key is the instance name, value is the 监视的主服务器的名字，字典的值则是一个
-                           sentinelRedisInstance structure pointer. */ //指向sentinelRedisInstance	
-    int tilt;           /* Are we in TILT mode? */ //是否进入tilt模式?
-    int running_scripts;    /* Number of scripts in execution right now. */ //目前正在执行脚本的数量
-    mstime_t tilt_start_time;       /* When TITL started. */ //进入tilt模式的时间
-    mstime_t previous_time;         /* Last time we ran the time handler. */ //最后一次执行时间处理器的时间
-    list *scripts_queue;            /* Queue of user scripts to execute. */ //一个FIFO队列，包含了所有需要执行的用户脚本
+    uint64_t current_epoch;         /* Current epoch. */
+    dict *masters;      /* Dictionary of master sentinelRedisInstances.
+                           Key is the instance name, value is the
+                           sentinelRedisInstance structure pointer. */
+    int tilt;           /* Are we in TILT mode? */
+    int running_scripts;    /* Number of scripts in execution right now. */
+    mstime_t tilt_start_time;       /* When TITL started. */
+    mstime_t previous_time;         /* Last time we ran the time handler. */
+    list *scripts_queue;            /* Queue of user scripts to execute. */
     char *announce_ip;  /* IP addr that is gossiped to other sentinels if
                            not NULL. */
     int announce_port;  /* Port that is gossiped to other sentinels if
