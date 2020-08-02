@@ -1,31 +1,9 @@
----- activeExpireCycle Matches (7 in 4 files) ----
-defrag.c (src) line 1028 :  * This works in a similar way to activeExpireCycle, in the sense that
-activeDefragCycle in defrag.c (src) :     /* See activeExpireCycle for how timelimit is handled. */
-expire.c (src) line 44 : /* Helper function for the activeExpireCycle() function.
-expire.c (src) line 98 : void activeExpireCycle(int type) {
-databasesCron in server.c (src) :             activeExpireCycle(ACTIVE_EXPIRE_CYCLE_SLOW);
-beforeSleep in server.c (src) :         activeExpireCycle(ACTIVE_EXPIRE_CYCLE_FAST);
-server.h (src) line 1931 : void activeExpireCycle(int type);
----- activeExpireCycle Search Errors Encountered (21) ----
-The following 21 files could not be processed:
-D:\github\redis\src\acl.c : File could not be opened.
-D:\github\redis\deps\hiredis\async_private.h : File could not be opened.
-D:\github\redis\src\connection.c : File could not be opened.
-D:\github\redis\src\connection.h : File could not be opened.
-D:\github\redis\src\connhelpers.h : File could not be opened.
-D:\github\redis\src\crc16_slottable.h : File could not be opened.
-D:\github\redis\tests\modules\fork.c : File could not be opened.
-D:\github\redis\src\gopher.c : File could not be opened.
-D:\github\redis\deps\hiredis\hiredis_ssl.h : File could not be opened.
-D:\github\redis\tests\modules\infotest.c : File could not be opened.
-D:\github\redis\src\lolwut.h : File could not be opened.
-D:\github\redis\src\lolwut6.c : File could not be opened.
-D:\github\redis\tests\modules\propagate.c : File could not be opened.
-D:\github\redis\src\sha256.c : File could not be opened.
-D:\github\redis\src\sha256.h : File could not be opened.
-D:\github\redis\deps\hiredis\sockcompat.c : File could not be opened.
-D:\github\redis\deps\hiredis\sockcompat.h : File could not be opened.
-D:\github\redis\deps\hiredis\ssl.c : File could not be opened.
-D:\github\redis\src\tls.c : File could not be opened.
-D:\github\redis\src\tracking.c : File could not be opened.
-D:\github\redis\utils\tracking_collisions.c : File could not be opened.
+---- SDS_HDR_VAR Matches (8 in 0 files) ----
+sdsnewlen in sds.c (src) :             SDS_HDR_VAR(8,s);
+sdsnewlen in sds.c (src) :             SDS_HDR_VAR(16,s);
+sdsnewlen in sds.c (src) :             SDS_HDR_VAR(32,s);
+sdsnewlen in sds.c (src) :             SDS_HDR_VAR(64,s);
+sdsIncrLen in sds.c (src) :             SDS_HDR_VAR(8,s);
+sdsIncrLen in sds.c (src) :             SDS_HDR_VAR(16,s);
+sdsIncrLen in sds.c (src) :             SDS_HDR_VAR(32,s);
+sdsIncrLen in sds.c (src) :             SDS_HDR_VAR(64,s);
