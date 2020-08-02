@@ -164,7 +164,6 @@ typedef struct instanceLink {
 typedef struct sentinelRedisInstance {
 	//主服务器:SRI_MASTER
 	//从服务器:SRI_SLVAE
-	// other sentinel: SRI_SENTINEL
     int flags;      /* See SRI_... defines *///标识值，记录了实例的类型，以及该实例的当前状态
     //实例的名字
     //主服务器的名字由用户在配置文件中设置
@@ -480,11 +479,10 @@ struct redisCommand sentinelcmds[] = {
  * specific defaults. */
 void initSentinelConfig(void) {
     server.port = REDIS_SENTINEL_PORT;
-    server.protected_mode = 0; /* Sentinel must be exposed. *///不太理解 保护模式??
+    server.protected_mode = 0; /* Sentinel must be exposed. */
 }
 
 /* Perform the Sentinel mode initialization. */
-//完成了对sentinel状态结构的初始化
 void initSentinel(void) {
     unsigned int j;
 
@@ -1184,7 +1182,7 @@ void sentinelDisconnectCallback(const redisAsyncContext *c, int status) {
  * The function may also fail and return NULL with errno set to EBUSY if
  * a master with the same name, a slave with the same address, or a sentinel
  * with the same ID already exists. */
-//给sentinel.master  赋值
+
 sentinelRedisInstance *createSentinelRedisInstance(char *name, int flags, char *hostname, int port, int quorum, sentinelRedisInstance *master) {
     sentinelRedisInstance *ri;
     sentinelAddr *addr;
@@ -1629,7 +1627,6 @@ char *sentinelInstanceMapCommand(sentinelRedisInstance *ri, char *command) {
 }
 
 /* ============================ Config handling ============================= */
-//哨兵sentinel文件分析器
 char *sentinelHandleConfiguration(char **argv, int argc) {
     sentinelRedisInstance *ri;
 
@@ -2678,7 +2675,6 @@ int sentinelSendPing(sentinelRedisInstance *ri) {
 
 /* Send periodic PING, INFO, and PUBLISH to the Hello channel to
  * the specified master or slave instance. */
- //主观下线检查
 void sentinelSendPeriodicCommands(sentinelRedisInstance *ri) {
     mstime_t now = mstime();
     mstime_t info_period, ping_period;
@@ -4434,9 +4430,7 @@ void sentinelAbortFailover(sentinelRedisInstance *ri) {
 void sentinelHandleRedisInstance(sentinelRedisInstance *ri) {
     /* ========== MONITORING HALF ============ */
     /* Every kind of instance */
-	//重连
     sentinelReconnectInstance(ri);
-	//发送ping命令给这个实例
     sentinelSendPeriodicCommands(ri);
 
     /* ============== ACTING HALF ============= */
@@ -4450,7 +4444,6 @@ void sentinelHandleRedisInstance(sentinelRedisInstance *ri) {
     }
 
     /* Every kind of instance */
-	//检测是够主观下线
     sentinelCheckSubjectivelyDown(ri);
 
     /* Masters and slaves */
@@ -4470,7 +4463,6 @@ void sentinelHandleRedisInstance(sentinelRedisInstance *ri) {
 
 /* Perform scheduled operations for all the instances in the dictionary.
  * Recursively call the function against dictionaries of slaves. */
- //检测所有连接实例
 void sentinelHandleDictOfRedisInstances(dict *instances) {
     dictIterator *di;
     dictEntry *de;
@@ -4525,15 +4517,9 @@ void sentinelCheckTiltCondition(void) {
     }
     sentinel.previous_time = mstime();
 }
-//sentinel 主函数
+
 void sentinelTimer(void) {
-	// 并判断是否需要进入 TITL 模式
     sentinelCheckTiltCondition();
-	// 执行定期操作
-    // 比如 PING 实例、分析主服务器和从服务器的 INFO 命令
-    // 向其他监视相同主服务器的  发送问候信息
-    // 并接收其他  发来的问候信息
-    // 执行故障转移操作，等等
     sentinelHandleDictOfRedisInstances(sentinel.masters);
     sentinelRunPendingScripts();
     sentinelCollectTerminatedScripts();

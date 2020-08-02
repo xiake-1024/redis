@@ -648,11 +648,8 @@ typedef struct clientReplyBlock {
 typedef struct redisDb {
     dict *dict;                 /* The keyspace for this DB */  //数据库中的键值队
     dict *expires;              /* Timeout of keys with a timeout set *//* 设置的过期的key，key-timeout */
-	//存储阻塞键以及客户端信息  比如list类型的阻塞命令
-    dict *blocking_keys;        /* Keys with clients waiting for data (BLPOP)*/ 
-	//存储阻塞建  就绪数据信息 ，对应上面的blocking_keys数据，用于解除阻塞
+    dict *blocking_keys;        /* Keys with clients waiting for data (BLPOP)*/
     dict *ready_keys;           /* Blocked keys that received a PUSH */
-	//事务中会使用
     dict *watched_keys;         /* WATCHED keys for MULTI/EXEC CAS */ //事务中被监视的key
     int id;                     /* Database ID */ //数据库的id
     long long avg_ttl;          /* Average TTL, just for stats */
@@ -1064,7 +1061,6 @@ struct redisServer {
     int active_defrag_cycle_max;       /* maximal effort for defrag in CPU percentage */
     unsigned long active_defrag_max_scan_fields; /* maximum number of fields of set/hash/zset/list to process from within the main dict scan */
     size_t client_max_querybuf_len; /* Limit for client query buffer length */
-	//服务器启动时，根据该参数确定数据库个数
     int dbnum;                      /* Total number of configured DBs */ //数据库个数
     int supervised;                 /* 1 if supervised, 0 otherwise. */
     int supervised_mode;            /* See SUPERVISED_* */

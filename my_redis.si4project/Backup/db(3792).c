@@ -1115,18 +1115,13 @@ void setExpire(client *c, redisDb *db, robj *key, long long when) {
     dictEntry *kde, *de;
 
     /* Reuse the sds from the main dict in the expire dict */
-	//从字典中查找键值对
     kde = dictFind(db->dict,key->ptr);
-	//如果键值对为空  暴出
     serverAssertWithInfo(NULL,key,kde != NULL);
-	//从过期字典中查找，如果不存在则添加
     de = dictAddOrFind(db->expires,dictGetKey(kde));
-	//设置过期字典中键值为过期时间
     dictSetSignedIntegerVal(de,when);
-	//判断是够需要同步从库
+
     int writable_slave = server.masterhost && server.repl_slave_ro == 0;
     if (c && writable_slave && !(c->flags & CLIENT_MASTER))
-		//同步从库
         rememberSlaveKeyWithExpire(db,key);
 }
 
@@ -1239,15 +1234,15 @@ int expireIfNeeded(redisDb *db, robj *key) {
      * Still we try to return the right information to the caller,
      * that is, 0 if we think the key should be still valid, 1 if
      * we think the key is expired at this time. */
-      // slave 直接返回键是否过期（如果是主从模式，从）
+      // slave 直接返回键是否过期
     if (server.masterhost != NULL) return 1;
 
     /* Delete the key */
-	// 键过期，删除键（过期统计）
+	// 键过期，删除键
     server.stat_expiredkeys++;
-	// 触发命令传播(将过期处理的操作同步到aof和从节点)
+	// 触发命令传播
     propagateExpire(db,key,server.lazyfree_lazy_expire);
-	// 和键空间事件（过期事件通知）
+	// 和键空间事件
     notifyKeyspaceEvent(NOTIFY_EXPIRED,
         "expired",key,db->id);
 	  // 根据是否懒删除，调用不同的函数 

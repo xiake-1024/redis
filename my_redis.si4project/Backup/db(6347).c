@@ -66,7 +66,6 @@ robj *lookupKey(redisDb *db, robj *key, int flags) {
          * Don't do it if we have a saving child, as this will trigger
          * a copy on write madness. */
          // 当处于 rdb aof 子进程复制阶段或者 flags 不是 LOOKUP_NOTOUCH
-         //更新LRU/LFU 操作时间
         if (server.rdb_child_pid == -1 &&
             server.aof_child_pid == -1 &&
             !(flags & LOOKUP_NOTOUCH))
@@ -191,18 +190,13 @@ robj *lookupKeyWriteOrReply(client *c, robj *key, robj *reply) {
  * The program is aborted if the key already exists. */
  //添加键值队到数据库
 void dbAdd(redisDb *db, robj *key, robj *val) {
-//复制键对象
     sds copy = sdsdup(key->ptr);
-//键值对写入数据库字典
     int retval = dictAdd(db->dict, copy, val);
 
-	//判断写入结果
     serverAssertWithInfo(NULL,key,retval == DICT_OK);
-	
     if (val->type == OBJ_LIST ||
         val->type == OBJ_ZSET)
 		//val是list对象，将key从bloking_keysh转移到ready_keys字典中  不理解??
-		//可能有阻塞操作
         signalKeyAsReady(db, key);
 	 //集群模式下，将key-slot信息记录到slots_to_keys 不理解??
     if (server.cluster_enabled) slotToKeyAdd(key);
@@ -242,19 +236,13 @@ void dbOverwrite(redisDb *db, robj *key, robj *val) {
  *
  * All the new keys in the database should be created via this interface. */
 void setKey(redisDb *db, robj *key, robj *val) {
-	// 查找键值对
     if (lookupKeyWrite(db,key) == NULL) {
-		//不存在 添加
         dbAdd(db,key,val);
     } else {
-    //复写
         dbOverwrite(db,key,val);
     }
-	//引用计数加1
     incrRefCount(val);
-	//删除过期时间
     removeExpire(db,key);
-	//发送修改事件通知
     signalModifiedKey(db,key);
 }
 
@@ -306,7 +294,6 @@ int dbSyncDelete(redisDb *db, robj *key) {
     /* Deleting an entry from the expires dict will not free the sds of
      * the key, because it is shared with the main dictionary. */
     if (dictSize(db->expires) > 0) dictDelete(db->expires,key->ptr);//过期字典中删除
-    //直接删除数据库库字典中的键值对
     if (dictDelete(db->dict,key->ptr) == DICT_OK) {
         if (server.cluster_enabled) slotToKeyDel(key); //通知集群其他槽删除
         return 1;
@@ -318,7 +305,6 @@ int dbSyncDelete(redisDb *db, robj *key) {
 /* This is a wrapper whose behavior depends on the Redis lazy free
  * configuration. Deletes the key synchronously or asynchronously. */
 int dbDelete(redisDb *db, robj *key) {
-//如果设置了lazyfree内存淘汰机制 则异步删除，否则同步
     return server.lazyfree_lazy_server_del ? dbAsyncDelete(db,key) :
                                              dbSyncDelete(db,key);
 }
@@ -413,10 +399,8 @@ long long emptyDb(int dbnum, int flags, void(callback)(void*)) {
 }
 
 int selectDb(client *c, int id) {
-	//判断传递的id 是否符合数据库序列的条件
     if (id < 0 || id >= server.dbnum)
         return C_ERR;
-	//设置客户端当前操作db为对应序列的db数组里的数据库
     c->db = &server.db[id];
     return C_OK;
 }
@@ -1115,18 +1099,13 @@ void setExpire(client *c, redisDb *db, robj *key, long long when) {
     dictEntry *kde, *de;
 
     /* Reuse the sds from the main dict in the expire dict */
-	//从字典中查找键值对
     kde = dictFind(db->dict,key->ptr);
-	//如果键值对为空  暴出
     serverAssertWithInfo(NULL,key,kde != NULL);
-	//从过期字典中查找，如果不存在则添加
     de = dictAddOrFind(db->expires,dictGetKey(kde));
-	//设置过期字典中键值为过期时间
     dictSetSignedIntegerVal(de,when);
-	//判断是够需要同步从库
+
     int writable_slave = server.masterhost && server.repl_slave_ro == 0;
     if (c && writable_slave && !(c->flags & CLIENT_MASTER))
-		//同步从库
         rememberSlaveKeyWithExpire(db,key);
 }
 
@@ -1239,15 +1218,15 @@ int expireIfNeeded(redisDb *db, robj *key) {
      * Still we try to return the right information to the caller,
      * that is, 0 if we think the key should be still valid, 1 if
      * we think the key is expired at this time. */
-      // slave 直接返回键是否过期（如果是主从模式，从）
+      // slave 直接返回键是否过期
     if (server.masterhost != NULL) return 1;
 
     /* Delete the key */
-	// 键过期，删除键（过期统计）
+	// 键过期，删除键
     server.stat_expiredkeys++;
-	// 触发命令传播(将过期处理的操作同步到aof和从节点)
+	// 触发命令传播
     propagateExpire(db,key,server.lazyfree_lazy_expire);
-	// 和键空间事件（过期事件通知）
+	// 和键空间事件
     notifyKeyspaceEvent(NOTIFY_EXPIRED,
         "expired",key,db->id);
 	  // 根据是否懒删除，调用不同的函数 

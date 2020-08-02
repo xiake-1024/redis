@@ -480,11 +480,10 @@ struct redisCommand sentinelcmds[] = {
  * specific defaults. */
 void initSentinelConfig(void) {
     server.port = REDIS_SENTINEL_PORT;
-    server.protected_mode = 0; /* Sentinel must be exposed. *///不太理解 保护模式??
+    server.protected_mode = 0; /* Sentinel must be exposed. */
 }
 
 /* Perform the Sentinel mode initialization. */
-//完成了对sentinel状态结构的初始化
 void initSentinel(void) {
     unsigned int j;
 
@@ -1184,7 +1183,7 @@ void sentinelDisconnectCallback(const redisAsyncContext *c, int status) {
  * The function may also fail and return NULL with errno set to EBUSY if
  * a master with the same name, a slave with the same address, or a sentinel
  * with the same ID already exists. */
-//给sentinel.master  赋值
+
 sentinelRedisInstance *createSentinelRedisInstance(char *name, int flags, char *hostname, int port, int quorum, sentinelRedisInstance *master) {
     sentinelRedisInstance *ri;
     sentinelAddr *addr;
@@ -1629,7 +1628,6 @@ char *sentinelInstanceMapCommand(sentinelRedisInstance *ri, char *command) {
 }
 
 /* ============================ Config handling ============================= */
-//哨兵sentinel文件分析器
 char *sentinelHandleConfiguration(char **argv, int argc) {
     sentinelRedisInstance *ri;
 
@@ -4434,7 +4432,6 @@ void sentinelAbortFailover(sentinelRedisInstance *ri) {
 void sentinelHandleRedisInstance(sentinelRedisInstance *ri) {
     /* ========== MONITORING HALF ============ */
     /* Every kind of instance */
-	//重连
     sentinelReconnectInstance(ri);
 	//发送ping命令给这个实例
     sentinelSendPeriodicCommands(ri);
@@ -4525,15 +4522,9 @@ void sentinelCheckTiltCondition(void) {
     }
     sentinel.previous_time = mstime();
 }
-//sentinel 主函数
+
 void sentinelTimer(void) {
-	// 并判断是否需要进入 TITL 模式
     sentinelCheckTiltCondition();
-	// 执行定期操作
-    // 比如 PING 实例、分析主服务器和从服务器的 INFO 命令
-    // 向其他监视相同主服务器的  发送问候信息
-    // 并接收其他  发来的问候信息
-    // 执行故障转移操作，等等
     sentinelHandleDictOfRedisInstances(sentinel.masters);
     sentinelRunPendingScripts();
     sentinelCollectTerminatedScripts();
